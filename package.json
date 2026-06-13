@@ -1,0 +1,18 @@
+{
+  "name": "revara_inventory",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev\"",
+    "build": "npm run build --prefix frontend && npm run build --prefix backend"
+  },
+  "dependencies": {
+    "react-barcode": "^1.6.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.1.2",
+    "vite": "^8.0.16"
+  }
+}
