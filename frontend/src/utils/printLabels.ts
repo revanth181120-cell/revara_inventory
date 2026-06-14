@@ -1,64 +1,128 @@
-import { LabelDimensions } from '../types/Product';
+import { LabelDimensions, getLabelRowWidthMm, getLabelRowPitchMm } from '../types/Product';
 import { buildLabelPrintCss } from './labelSizing';
 
-function buildPrintStyles(dimensions: LabelDimensions): string {
-  const { labelWidthMm, labelHeightMm, columnsPerRow, gapMm } = dimensions;
-  const rowWidthMm = labelWidthMm * columnsPerRow + gapMm * (columnsPerRow - 1);
+const PRINT_STYLE_ID = 'revara-label-print-styles';
+const PRINT_HOST_ID = 'revara-print-host';
+
+/** One page per label row — matches TTprinter Revara 101×25mm stock per page. */
+export function buildLabelPrintStyles(dimensions: LabelDimensions): string {
+  const { labelWidthMm, labelHeightMm, columnsPerRow, gapMm, leadingMarginMm = 0 } = dimensions;
+  const rowWidthMm = getLabelRowWidthMm(dimensions);
 
   return `
-    @page { size: ${rowWidthMm}mm ${labelHeightMm}mm; margin: 0; }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; }
-    .labels-container { margin: 0; padding: 0; }
-    .label-row {
-      display: grid;
-      grid-template-columns: repeat(${columnsPerRow}, ${labelWidthMm}mm);
-      gap: ${gapMm}mm;
-      width: ${rowWidthMm}mm;
-      height: ${labelHeightMm}mm;
-      page-break-after: always;
-      break-after: page;
-      break-inside: avoid;
-      overflow: hidden;
+    @page {
+      margin: 0;
+      size: ${rowWidthMm}mm ${labelHeightMm}mm;
     }
-    .label-row:last-child {
-      page-break-after: auto;
-      break-after: auto;
+    @media print {
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: ${rowWidthMm}mm;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body > *:not(#${PRINT_HOST_ID}) {
+        display: none !important;
+      }
+      #${PRINT_HOST_ID} {
+        display: block !important;
+        margin: 0;
+        padding: 0;
+        width: ${rowWidthMm}mm;
+      }
+      .labels-container {
+        margin: 0;
+        padding: 0;
+        display: block;
+        width: ${rowWidthMm}mm;
+        direction: ltr;
+      }
+      .print-page {
+        width: ${rowWidthMm}mm;
+        height: ${labelHeightMm}mm;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      .print-page:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .label-row {
+        display: grid !important;
+        grid-template-columns: repeat(${columnsPerRow}, ${labelWidthMm}mm) !important;
+        grid-auto-flow: column;
+        align-items: start;
+        align-content: start;
+        direction: ltr;
+        gap: ${gapMm}mm;
+        padding: 0 !important;
+        padding-left: ${leadingMarginMm}mm !important;
+        width: ${rowWidthMm}mm !important;
+        height: ${labelHeightMm}mm !important;
+        max-height: ${labelHeightMm}mm !important;
+        margin: 0 !important;
+        overflow: hidden;
+      }
+      .tt-label {
+        height: ${labelHeightMm}mm !important;
+        max-height: ${labelHeightMm}mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .tt-label--spacer {
+        border: none !important;
+        background: transparent !important;
+      }
+      ${buildLabelPrintCss(dimensions, true)}
     }
-    ${buildLabelPrintCss(dimensions)}
   `;
 }
 
-/** Print only the label sheet in an isolated iframe — avoids paginating the whole app. */
+export function injectLabelPrintStyles(dimensions: LabelDimensions): void {
+  removeLabelPrintStyles();
+  const style = document.createElement('style');
+  style.id = PRINT_STYLE_ID;
+  style.textContent = buildLabelPrintStyles(dimensions);
+  document.head.appendChild(style);
+}
+
+export function removeLabelPrintStyles(): void {
+  document.getElementById(PRINT_STYLE_ID)?.remove();
+}
+
+function removePrintHost(): void {
+  document.getElementById(PRINT_HOST_ID)?.remove();
+}
+
+/** Print one label row per page (2 labels/page for 2-up format). */
 export function printLabelSheet(dimensions: LabelDimensions): boolean {
   const source = document.querySelector('.tt-label-sheet-wrap--print .labels-container');
   if (!source) return false;
 
-  const iframe = document.createElement('iframe');
-  iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden';
-  document.body.appendChild(iframe);
+  removePrintHost();
 
-  const doc = iframe.contentDocument;
-  const win = iframe.contentWindow;
-  if (!doc || !win) {
-    document.body.removeChild(iframe);
-    return false;
-  }
+  const host = document.createElement('div');
+  host.id = PRINT_HOST_ID;
+  host.appendChild(source.cloneNode(true));
+  document.body.appendChild(host);
 
-  doc.open();
-  doc.write(`<!DOCTYPE html><html><head><title>Print Labels</title><style>${buildPrintStyles(dimensions)}</style></head><body></body></html>`);
-  doc.close();
-  doc.body.appendChild(source.cloneNode(true));
+  injectLabelPrintStyles(dimensions);
 
   const cleanup = () => {
-    if (iframe.parentNode) document.body.removeChild(iframe);
+    removePrintHost();
+    removeLabelPrintStyles();
   };
+  window.addEventListener('afterprint', cleanup, { once: true });
+  setTimeout(cleanup, 60_000);
 
-  win.onafterprint = cleanup;
-  setTimeout(cleanup, 30_000);
-
-  win.focus();
-  win.print();
+  window.print();
   return true;
 }
+
+export { getLabelRowPitchMm };

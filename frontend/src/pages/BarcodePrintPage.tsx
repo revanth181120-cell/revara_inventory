@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Product, LABEL_FORMAT_PRESETS, LabelFormatId, LabelDimensions } from '../types/Product';
+import { Product, LABEL_FORMAT_PRESETS, LabelFormatId, LabelDimensions, getLabelRowWidthMm } from '../types/Product';
 import { LabelSheet } from '../components/LabelPrint';
 import { printLabelSheet } from '../utils/printLabels';
 import { X, Printer, Check, Tag } from 'lucide-react';
@@ -32,6 +32,11 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
         labelHeightMm: LABEL_FORMAT_PRESETS[formatId].labelHeightMm,
         columnsPerRow: LABEL_FORMAT_PRESETS[formatId].columnsPerRow,
         gapMm: LABEL_FORMAT_PRESETS[formatId].gapMm,
+        leadingMarginMm: LABEL_FORMAT_PRESETS[formatId].leadingMarginMm,
+        rowGapMm: LABEL_FORMAT_PRESETS[formatId].rowGapMm,
+        rowPitchGapMm: LABEL_FORMAT_PRESETS[formatId].rowPitchGapMm,
+        printOffsetXMm: LABEL_FORMAT_PRESETS[formatId].printOffsetXMm,
+        printOffsetYMm: LABEL_FORMAT_PRESETS[formatId].printOffsetYMm,
       };
 
   const selectedProducts = useMemo(() => {
@@ -41,8 +46,8 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
   }, [mode, products, missingProducts, selectedIds]);
 
   const labelsPerRow = dimensions.columnsPerRow;
-  const rowWidthMm = dimensions.labelWidthMm * dimensions.columnsPerRow + dimensions.gapMm * (dimensions.columnsPerRow - 1);
   const labelRows = Math.ceil(selectedProducts.length / labelsPerRow);
+  const rowWidthMm = getLabelRowWidthMm(dimensions);
 
   const handleSelectAll = () => {
     if (selectedIds.size === products.length) setSelectedIds(new Set());
@@ -57,8 +62,7 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
   };
 
   const handlePrint = () => {
-    const printed = printLabelSheet(dimensions);
-    if (!printed) window.print();
+    printLabelSheet(dimensions);
     if (onMarkPrinted && selectedProducts.length > 0) {
       onMarkPrinted(selectedProducts.map((p) => p.id));
     }
@@ -71,11 +75,11 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
           <h2 className="print-toolbar__title">Print Labels</h2>
           <p className="print-toolbar__info">
             {selectedProducts.length} labels • {dimensions.labelWidthMm}×{dimensions.labelHeightMm}mm •{' '}
-            {labelsPerRow} per row • {labelRows} strip{labelRows !== 1 ? 's' : ''} ({rowWidthMm}×{dimensions.labelHeightMm}mm each)
+            {labelsPerRow} per row •             {labelRows} strip{labelRows !== 1 ? 's' : ''} ({rowWidthMm}×{dimensions.labelHeightMm}mm each)
           </p>
           <p className="print-toolbar__hint">
-            Driver media: {rowWidthMm}×{dimensions.labelHeightMm}mm strip ({dimensions.labelWidthMm}×{dimensions.labelHeightMm}mm × {labelsPerRow} labels) •
-            Print dialog: TTprinter • Scale 100% • Margins None • Background graphics On
+            TTprinter: Revara 101×25mm • {labelRows} page{labelRows !== 1 ? 's' : ''} (1 row / 2 labels per page) •
+            Scale 100% • Margins None • Portrait
           </p>
         </div>
         <div className="print-toolbar__actions">

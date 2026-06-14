@@ -75,11 +75,17 @@ export function getSalePrice(product: Pick<Product, 'sellingPrice' | 'offerPrice
 export const LABEL_FORMAT_PRESETS = {
   '50x25-2up': {
     id: '50x25-2up' as const,
-    label: '50×25 mm (2 per row)',
-    labelWidthMm: 50,
+    label: '50×25 mm (2 per row, 101mm stock)',
+    labelWidthMm: 49.5,
     labelHeightMm: 25,
     columnsPerRow: 2,
-    gapMm: 0,
+    gapMm: 2,
+    leadingMarginMm: 0,
+    rowGapMm: 0,
+    /** Physical vertical gap between die-cut rows on the roll (mm). */
+    rowPitchGapMm: 2,
+    printOffsetXMm: 0.3,
+    printOffsetYMm: -1.0,
   },
   '100x25-single': {
     id: '100x25-single' as const,
@@ -106,6 +112,34 @@ export interface LabelDimensions {
   labelHeightMm: number;
   columnsPerRow: number;
   gapMm: number;
+  /** Space before the first label on each row (mm). */
+  leadingMarginMm?: number;
+  /** Vertical gap between printed label strips / rows (mm). */
+  rowGapMm?: number;
+  /** Physical gap between die-cut rows on the roll — used for multi-row pitch (mm). */
+  rowPitchGapMm?: number;
+  /** Print-only horizontal nudge (mm). Positive = right. */
+  printOffsetXMm?: number;
+  /** Print-only vertical nudge (mm). Negative = up. */
+  printOffsetYMm?: number;
+}
+
+/** Total printable row width including leading margin and gaps. */
+export function getLabelRowWidthMm(dimensions: LabelDimensions): number {
+  const leading = dimensions.leadingMarginMm ?? 0;
+  const gaps = dimensions.gapMm * Math.max(0, dimensions.columnsPerRow - 1);
+  return leading + dimensions.labelWidthMm * dimensions.columnsPerRow + gaps;
+}
+
+/** Distance from top of one row to top of the next on die-cut roll (label + gap). */
+export function getLabelRowPitchMm(dimensions: LabelDimensions): number {
+  const pitchGap = dimensions.rowPitchGapMm ?? 2;
+  return dimensions.labelHeightMm + pitchGap;
+}
+
+/** Total height for a continuous multi-row strip. */
+export function getLabelStripHeightMm(dimensions: LabelDimensions, rowCount: number): number {
+  return getLabelRowPitchMm(dimensions) * Math.max(1, rowCount);
 }
 
 /** @deprecated Use LABEL_FORMAT_PRESETS */
