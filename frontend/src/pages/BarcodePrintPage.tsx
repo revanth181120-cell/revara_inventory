@@ -1,5 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Product, LABEL_FORMAT_PRESETS, LabelFormatId, LabelDimensions, getLabelRowWidthMm } from '../types/Product';
+import {
+  Product,
+  LABEL_FORMAT_PRESETS,
+  LabelFormatId,
+  LabelDimensions,
+  getLabelRowWidthMm,
+  MAX_LABEL_COLUMNS_PER_ROW,
+  MIN_LABEL_COLUMNS_PER_ROW,
+  normalizeLabelColumnsPerRow,
+} from '../types/Product';
 import { LabelSheet } from '../components/LabelPrint';
 import { printLabelSheet } from '../utils/printLabels';
 import { X, Printer, Check, Tag } from 'lucide-react';
@@ -10,6 +19,12 @@ interface BarcodePrintPageProps {
   products: Product[];
   onClose?: () => void;
   onMarkPrinted?: (ids: string[]) => void;
+}
+
+function clampNumberInput(value: string, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return min;
+  return Math.min(max, Math.max(min, parsed));
 }
 
 export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, onClose, onMarkPrinted }) => {
@@ -26,7 +41,7 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
   const missingProducts = useMemo(() => products.filter((p) => !p.labelPrinted), [products]);
 
   const dimensions: LabelDimensions = formatId === 'custom'
-    ? customDims
+    ? { ...customDims, columnsPerRow: normalizeLabelColumnsPerRow(customDims.columnsPerRow) }
     : {
         labelWidthMm: LABEL_FORMAT_PRESETS[formatId].labelWidthMm,
         labelHeightMm: LABEL_FORMAT_PRESETS[formatId].labelHeightMm,
@@ -110,10 +125,10 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
       {formatId === 'custom' && (
         <div className="label-config">
           <div className="label-config__custom">
-            <label>Width (mm) <input type="number" min={20} max={120} value={customDims.labelWidthMm} onChange={(e) => setCustomDims((d) => ({ ...d, labelWidthMm: +e.target.value }))} /></label>
-            <label>Height (mm) <input type="number" min={10} max={50} value={customDims.labelHeightMm} onChange={(e) => setCustomDims((d) => ({ ...d, labelHeightMm: +e.target.value }))} /></label>
-            <label>Per row <input type="number" min={1} max={4} value={customDims.columnsPerRow} onChange={(e) => setCustomDims((d) => ({ ...d, columnsPerRow: +e.target.value }))} /></label>
-            <label>Gap (mm) <input type="number" min={0} max={10} value={customDims.gapMm} onChange={(e) => setCustomDims((d) => ({ ...d, gapMm: +e.target.value }))} /></label>
+            <label>Width (mm) <input type="number" min={20} max={120} value={customDims.labelWidthMm} onChange={(e) => setCustomDims((d) => ({ ...d, labelWidthMm: clampNumberInput(e.target.value, 20, 120) }))} /></label>
+            <label>Height (mm) <input type="number" min={10} max={50} value={customDims.labelHeightMm} onChange={(e) => setCustomDims((d) => ({ ...d, labelHeightMm: clampNumberInput(e.target.value, 10, 50) }))} /></label>
+            <label>Per row <input type="number" min={MIN_LABEL_COLUMNS_PER_ROW} max={MAX_LABEL_COLUMNS_PER_ROW} value={customDims.columnsPerRow} onChange={(e) => setCustomDims((d) => ({ ...d, columnsPerRow: normalizeLabelColumnsPerRow(Number(e.target.value)) }))} /></label>
+            <label>Gap (mm) <input type="number" min={0} max={10} value={customDims.gapMm} onChange={(e) => setCustomDims((d) => ({ ...d, gapMm: clampNumberInput(e.target.value, 0, 10) }))} /></label>
           </div>
         </div>
       )}

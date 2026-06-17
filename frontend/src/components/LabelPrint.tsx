@@ -1,6 +1,6 @@
 import React from 'react';
 import Barcode from 'react-barcode';
-import { Product, LabelDimensions, getLabelRowWidthMm } from '../types/Product';
+import { Product, LabelDimensions, getLabelRowWidthMm, normalizeLabelColumnsPerRow } from '../types/Product';
 import { getLabelSizing } from '../utils/labelSizing';
 
 interface LabelPrintProps {
@@ -116,8 +116,10 @@ function LabelRow({
 }
 
 export const LabelSheet: React.FC<LabelSheetProps> = ({ products, dimensions, className = '' }) => {
-  const { columnsPerRow, gapMm, leadingMarginMm = 0, labelHeightMm } = dimensions;
-  const rowWidthMm = getLabelRowWidthMm(dimensions);
+  const columnsPerRow = normalizeLabelColumnsPerRow(dimensions.columnsPerRow);
+  const safeDimensions = { ...dimensions, columnsPerRow };
+  const { gapMm, leadingMarginMm = 0, labelHeightMm } = safeDimensions;
+  const rowWidthMm = getLabelRowWidthMm(safeDimensions);
   const isPrint = className.includes('--print');
   const rows: Product[][] = [];
   for (let i = 0; i < products.length; i += columnsPerRow) {
@@ -125,7 +127,7 @@ export const LabelSheet: React.FC<LabelSheetProps> = ({ products, dimensions, cl
   }
 
   const rowProps = {
-    dimensions,
+    dimensions: safeDimensions,
     rowWidthMm,
     labelHeightMm,
     columnsPerRow,

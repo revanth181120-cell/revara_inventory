@@ -1,4 +1,4 @@
-import { LabelDimensions, getLabelRowWidthMm, getLabelRowPitchMm } from '../types/Product';
+import { LabelDimensions, getLabelRowWidthMm, getLabelRowPitchMm, normalizeLabelColumnsPerRow } from '../types/Product';
 import { buildLabelPrintCss } from './labelSizing';
 
 const PRINT_STYLE_ID = 'revara-label-print-styles';
@@ -6,8 +6,10 @@ const PRINT_HOST_ID = 'revara-print-host';
 
 /** One page per label row — matches TTprinter Revara 101×25mm stock per page. */
 export function buildLabelPrintStyles(dimensions: LabelDimensions): string {
-  const { labelWidthMm, labelHeightMm, columnsPerRow, gapMm, leadingMarginMm = 0 } = dimensions;
-  const rowWidthMm = getLabelRowWidthMm(dimensions);
+  const columnsPerRow = normalizeLabelColumnsPerRow(dimensions.columnsPerRow);
+  const safeDimensions = { ...dimensions, columnsPerRow };
+  const { labelWidthMm, labelHeightMm, gapMm, leadingMarginMm = 0 } = safeDimensions;
+  const rowWidthMm = getLabelRowWidthMm(safeDimensions);
 
   return `
     @page {
@@ -79,7 +81,7 @@ export function buildLabelPrintStyles(dimensions: LabelDimensions): string {
         border: none !important;
         background: transparent !important;
       }
-      ${buildLabelPrintCss(dimensions, true)}
+      ${buildLabelPrintCss(safeDimensions, true)}
     }
   `;
 }

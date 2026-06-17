@@ -124,11 +124,26 @@ export interface LabelDimensions {
   printOffsetYMm?: number;
 }
 
+export const MIN_LABEL_COLUMNS_PER_ROW = 1;
+export const MAX_LABEL_COLUMNS_PER_ROW = 4;
+
+export function normalizeLabelColumnsPerRow(columnsPerRow: number): number {
+  if (!Number.isFinite(columnsPerRow)) {
+    return MIN_LABEL_COLUMNS_PER_ROW;
+  }
+
+  return Math.min(
+    MAX_LABEL_COLUMNS_PER_ROW,
+    Math.max(MIN_LABEL_COLUMNS_PER_ROW, Math.trunc(columnsPerRow))
+  );
+}
+
 /** Total printable row width including leading margin and gaps. */
 export function getLabelRowWidthMm(dimensions: LabelDimensions): number {
+  const columnsPerRow = normalizeLabelColumnsPerRow(dimensions.columnsPerRow);
   const leading = dimensions.leadingMarginMm ?? 0;
-  const gaps = dimensions.gapMm * Math.max(0, dimensions.columnsPerRow - 1);
-  return leading + dimensions.labelWidthMm * dimensions.columnsPerRow + gaps;
+  const gaps = dimensions.gapMm * Math.max(0, columnsPerRow - 1);
+  return leading + dimensions.labelWidthMm * columnsPerRow + gaps;
 }
 
 /** Distance from top of one row to top of the next on die-cut roll (label + gap). */
