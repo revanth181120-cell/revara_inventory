@@ -89,23 +89,24 @@ export function useInventory() {
 
       try {
         const [apiProducts, apiSales] = await Promise.all([fetchProducts(), fetchSales()]);
-        if (apiProducts.length > 0 || apiSales.length > 0) {
+        const localProducts = localStorage.getItem(PRODUCTS_KEY);
+        const localSales = localStorage.getItem(SALES_KEY);
+
+        if (apiProducts.length > 0) {
           setProducts(apiProducts as Product[]);
+        } else if (localProducts) {
+          const parsed = migrateStoredProducts(JSON.parse(localProducts));
+          setProducts(parsed);
+          await syncProducts(parsed);
+        }
+
+        if (apiSales.length > 0) {
           setSales(apiSales as SaleRecord[]);
-        } else {
-          const localProducts = localStorage.getItem(PRODUCTS_KEY);
-          const localSales = localStorage.getItem(SALES_KEY);
-          if (localProducts) {
-            const parsed = migrateStoredProducts(JSON.parse(localProducts));
-            setProducts(parsed);
-            await syncProducts(parsed);
-          }
-          if (localSales) {
-            const parsed: SaleRecord[] = JSON.parse(localSales);
-            const normalized = parsed.map((s) => ({ ...s, costPrice: s.costPrice ?? 0 }));
-            setSales(normalized);
-            await syncSales(normalized);
-          }
+        } else if (localSales) {
+          const parsed: SaleRecord[] = JSON.parse(localSales);
+          const normalized = parsed.map((s) => ({ ...s, costPrice: s.costPrice ?? 0 }));
+          setSales(normalized);
+          await syncSales(normalized);
         }
       } catch {
         setApiConnected(false);
