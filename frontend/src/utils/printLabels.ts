@@ -101,7 +101,7 @@ function removePrintHost(): void {
 }
 
 /** Print one label row per page (2 labels/page for 2-up format). */
-export function printLabelSheet(dimensions: LabelDimensions): boolean {
+export function printLabelSheet(dimensions: LabelDimensions, onAfterPrint?: () => void): boolean {
   const source = document.querySelector('.tt-label-sheet-wrap--print .labels-container');
   if (!source) return false;
 
@@ -114,14 +114,35 @@ export function printLabelSheet(dimensions: LabelDimensions): boolean {
 
   injectLabelPrintStyles(dimensions);
 
-  const cleanup = () => {
+  let timeoutId: number | undefined;
+  let handledAfterPrint = false;
+
+  function cleanup() {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+    window.removeEventListener('afterprint', handleAfterPrint);
     removePrintHost();
     removeLabelPrintStyles();
-  };
-  window.addEventListener('afterprint', cleanup, { once: true });
-  setTimeout(cleanup, 60_000);
+  }
 
-  window.print();
+  function handleAfterPrint() {
+    if (handledAfterPrint) return;
+    handledAfterPrint = true;
+    cleanup();
+    onAfterPrint?.();
+  }
+
+  window.addEventListener('afterprint', handleAfterPrint, { once: true });
+  timeoutId = window.setTimeout(cleanup, 60_000);
+
+  try {
+    window.print();
+  } catch {
+    cleanup();
+    return false;
+  }
   return true;
 }
 

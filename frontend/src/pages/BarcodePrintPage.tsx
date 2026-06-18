@@ -62,9 +62,19 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
   };
 
   const handlePrint = () => {
-    printLabelSheet(dimensions);
-    if (onMarkPrinted && selectedProducts.length > 0) {
-      onMarkPrinted(selectedProducts.map((p) => p.id));
+    const selectedProductIds = selectedProducts.map((p) => p.id);
+    const printed = printLabelSheet(dimensions, () => {
+      if (!onMarkPrinted || selectedProductIds.length === 0) return;
+      const shouldMarkPrinted = window.confirm(
+        'Did the labels print successfully? Select OK to mark them as printed, or Cancel to keep them in Print Missing.'
+      );
+      if (shouldMarkPrinted) {
+        onMarkPrinted(selectedProductIds);
+      }
+    });
+
+    if (!printed) {
+      window.alert('Unable to prepare labels for printing. No labels were marked as printed.');
     }
   };
 
