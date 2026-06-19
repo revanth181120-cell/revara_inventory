@@ -1,6 +1,5 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
-import fs from 'fs';
 
 const DB_PATH = path.join(__dirname, '..', 'database', 'inventory.db');
 
@@ -43,7 +42,6 @@ function all<T>(db: sqlite3.Database, sql: string, params: unknown[] = []): Prom
 }
 
 export async function initDatabase(): Promise<sqlite3.Database> {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
   const db = new sqlite3.Database(DB_PATH);
 
   await run(db, `CREATE TABLE IF NOT EXISTS products (
