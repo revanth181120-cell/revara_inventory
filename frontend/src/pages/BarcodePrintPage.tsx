@@ -1,5 +1,17 @@
 import React, { useState, useMemo } from 'react';
-import { Product, LABEL_FORMAT_PRESETS, LabelFormatId, LabelDimensions, getLabelRowWidthMm, getLabelPageHeightMm, dimensionsFromPreset, isDumbbellLayout, expandProductsByQuantity } from '../types/Product';
+import {
+  Product,
+  LABEL_FORMAT_PRESETS,
+  LabelFormatId,
+  LabelDimensions,
+  MAX_LABELS_PER_PRINT_JOB,
+  getLabelRowWidthMm,
+  getLabelPageHeightMm,
+  dimensionsFromPreset,
+  isDumbbellLayout,
+  expandProductsByQuantity,
+  countPrintLabels,
+} from '../types/Product';
 import { LabelSheet } from '../components/LabelPrint';
 import { printLabelSheet } from '../utils/printLabels';
 import { X, Printer, Check, Tag } from 'lucide-react';
@@ -11,6 +23,9 @@ interface BarcodePrintPageProps {
   onClose?: () => void;
   onMarkPrinted?: (ids: string[]) => void;
 }
+
+const formatLabelCount = (count: number) =>
+  Number.isFinite(count) ? count.toLocaleString('en-IN') : `over ${MAX_LABELS_PER_PRINT_JOB.toLocaleString('en-IN')}`;
 
 export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, onClose, onMarkPrinted }) => {
   const [mode, setMode] = useState<PrintMode>('all');
@@ -58,22 +73,36 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
     return filteredProducts.filter((p) => selectedIds.has(p.id));
   }, [mode, filteredProducts, missingProducts, selectedIds]);
 
-  const labelsToPrint = useMemo(
-    () => (printByStockQty ? expandProductsByQuantity(selectedProducts) : selectedProducts),
+  const requestedLabelCount = useMemo(
+    () => countPrintLabels(selectedProducts, printByStockQty),
     [selectedProducts, printByStockQty],
   );
+  const labelLimitExceeded = requestedLabelCount > MAX_LABELS_PER_PRINT_JOB;
+  const labelsToPrint = useMemo(
+    () => {
+      if (labelLimitExceeded) return [];
+      return printByStockQty
+        ? expandProductsByQuantity(selectedProducts, MAX_LABELS_PER_PRINT_JOB)
+        : selectedProducts;
+    },
+    [selectedProducts, printByStockQty, labelLimitExceeded],
+  );
 
-  const labelCount = labelsToPrint.length;
+  const labelCount = labelLimitExceeded ? requestedLabelCount : labelsToPrint.length;
+  const labelCountText = formatLabelCount(labelCount);
+  const maxLabelCountText = MAX_LABELS_PER_PRINT_JOB.toLocaleString('en-IN');
   const productCount = selectedProducts.length;
   const labelsPerRow = dimensions.columnsPerRow;
-  const labelRows = Math.ceil(labelCount / labelsPerRow);
+  const labelRows = labelLimitExceeded ? 0 : Math.ceil(labelCount / labelsPerRow);
   const rowWidthMm = getLabelRowWidthMm(dimensions);
   const dumbbell = isDumbbellLayout(dimensions);
 
   const pitchMm = dimensions.rowPitchGapMm ?? 3;
   const pageHeightMm = getLabelPageHeightMm(dimensions);
 
-  const printHint = dumbbell
+  const printHint = labelLimitExceeded
+    ? `Select fewer products or turn off "One label per unit in stock" to stay under ${maxLabelCountText} labels.`
+    : dumbbell
     ? `Dumbbell 80×12mm • set printer paper to 80×${pageHeightMm}mm (${dimensions.labelHeightMm}+${pitchMm} pitch) • 1st pad REVARA+code • 2nd pad MRP • Scale 100% • Margins None`
     : formatId === '50x25-2up'
     ? `TTprinter: Revara 101×25mm • ${labelRows} page${labelRows !== 1 ? 's' : ''} (1 row / 2 labels per page) • Scale 100% • Margins None • Portrait`
@@ -96,7 +125,7 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
   };
 
   const handlePrint = () => {
-    if (labelCount === 0) return;
+    if (labelCount === 0 || labelLimitExceeded) return;
     const ok = printLabelSheet(dimensions, labelsToPrint, () => {
       if (onMarkPrinted) {
         onMarkPrinted(selectedProducts.map((p) => p.id));
@@ -114,8 +143,8 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
           <h2 className="print-toolbar__title">Print Labels</h2>
           <p className="print-toolbar__info">
             {printByStockQty && productCount > 0
-              ? `${productCount} product${productCount !== 1 ? 's' : ''} → ${labelCount} label${labelCount !== 1 ? 's' : ''} (by stock qty)`
-              : `${labelCount} label${dumbbell ? ' strip' : ''}${labelCount !== 1 ? 's' : ''}`}
+              ? `${productCount} product${productCount !== 1 ? 's' : ''} → ${labelCountText} label${labelCount !== 1 ? 's' : ''} (by stock qty)`
+              : `${labelCountText} label${dumbbell ? ' strip' : ''}${labelCount !== 1 ? 's' : ''}`}
             {supplierFilter !== 'All' ? ` • ${supplierFilter}` : ''}
             {' • '}
             {dumbbell
@@ -126,8 +155,8 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
           <p className="print-toolbar__hint">{printHint}</p>
         </div>
         <div className="print-toolbar__actions">
-          <button className="btn btn--primary" onClick={handlePrint} disabled={labelCount === 0}>
-            <Printer size={15} /> Print {labelCount} Labels
+          <button className="btn btn--primary" onClick={handlePrint} disabled={labelCount === 0 || labelLimitExceeded}>
+            <Printer size={15} /> Print {labelCountText} Labels
           </button>
           {onClose && (
             <button className="btn btn--ghost" onClick={onClose}>
@@ -234,7 +263,14 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
         <div className="empty-state" style={{ padding: '24px' }}>All products have labels printed.</div>
       )}
 
-      {labelCount === 0 && selectedProducts.length > 0 && printByStockQty && (
+      {labelLimitExceeded && (
+        <div className="empty-state print-empty-state">
+          This selection would create {labelCountText} labels. The print preview is limited to {maxLabelCountText} labels to keep the app responsive.
+          Narrow the supplier/selection, lower the stock quantity, or turn off &quot;One label per unit in stock&quot;.
+        </div>
+      )}
+
+      {!labelLimitExceeded && labelCount === 0 && selectedProducts.length > 0 && printByStockQty && (
         <div className="empty-state print-empty-state">
           Selected products have zero stock — nothing to print. Uncheck &quot;One label per unit in stock&quot; for one label each, or restock first.
         </div>
@@ -256,7 +292,7 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
         </div>
       )}
 
-      {labelCount > 0 && (
+      {!labelLimitExceeded && labelCount > 0 && (
         <>
           <p className="tt-preview-title">
             Preview — {dumbbell
@@ -271,7 +307,7 @@ export const BarcodePrintPage: React.FC<BarcodePrintPageProps> = ({ products, on
               className="labels-container--preview"
             />
             {labelCount > 8 && (
-              <p className="tt-preview-more">+ {labelCount - 8} more labels (included when printing)</p>
+              <p className="tt-preview-more">+ {formatLabelCount(labelCount - 8)} more labels (included when printing)</p>
             )}
           </div>
         </>

@@ -72,11 +72,26 @@ export function getSalePrice(product: Pick<Product, 'sellingPrice' | 'offerPrice
   return product.offerPrice > 0 ? product.offerPrice : product.sellingPrice;
 }
 
+export const MAX_LABELS_PER_PRINT_JOB = 5000;
+
 /** One label row per unit in stock (skips quantity 0). */
-export function expandProductsByQuantity(products: Product[]): Product[] {
+function getPrintQuantity(product: Pick<Product, 'quantity'>): number {
+  const quantity = Math.floor(product.quantity);
+  if (Number.isNaN(quantity) || quantity <= 0) return 0;
+  return quantity;
+}
+
+export function expandProductsByQuantity(
+  products: Product[],
+  maxLabels: number = MAX_LABELS_PER_PRINT_JOB,
+): Product[] {
   const rows: Product[] = [];
+  const safeMax = Number.isFinite(maxLabels)
+    ? Math.max(0, Math.floor(maxLabels))
+    : MAX_LABELS_PER_PRINT_JOB;
   for (const product of products) {
-    const qty = Math.max(0, Math.floor(product.quantity));
+    if (rows.length >= safeMax) break;
+    const qty = Math.min(getPrintQuantity(product), safeMax - rows.length);
     for (let i = 0; i < qty; i++) {
       rows.push(product);
     }
@@ -86,7 +101,7 @@ export function expandProductsByQuantity(products: Product[]): Product[] {
 
 export function countPrintLabels(products: Product[], byStockQuantity: boolean): number {
   if (!byStockQuantity) return products.length;
-  return products.reduce((sum, p) => sum + Math.max(0, Math.floor(p.quantity)), 0);
+  return products.reduce((sum, p) => sum + getPrintQuantity(p), 0);
 }
 
 export type LabelLayout = 'standard' | 'dumbbell';
