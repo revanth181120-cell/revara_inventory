@@ -72,6 +72,25 @@ export function getSalePrice(product: Pick<Product, 'sellingPrice' | 'offerPrice
   return product.offerPrice > 0 ? product.offerPrice : product.sellingPrice;
 }
 
+/** One label row per unit in stock (skips quantity 0). */
+export function expandProductsByQuantity(products: Product[]): Product[] {
+  const rows: Product[] = [];
+  for (const product of products) {
+    const qty = Math.max(0, Math.floor(product.quantity));
+    for (let i = 0; i < qty; i++) {
+      rows.push(product);
+    }
+  }
+  return rows;
+}
+
+export function countPrintLabels(products: Product[], byStockQuantity: boolean): number {
+  if (!byStockQuantity) return products.length;
+  return products.reduce((sum, p) => sum + Math.max(0, Math.floor(p.quantity)), 0);
+}
+
+export type LabelLayout = 'standard' | 'dumbbell';
+
 export const LABEL_FORMAT_PRESETS = {
   '50x25-2up': {
     id: '50x25-2up' as const,
@@ -95,6 +114,25 @@ export const LABEL_FORMAT_PRESETS = {
     columnsPerRow: 1,
     gapMm: 2,
   },
+  '80x12-dumbbell': {
+    id: '80x12-dumbbell' as const,
+    label: '80×12 mm dumbbell (30+20+30)',
+    layout: 'dumbbell' as LabelLayout,
+    stockWidthMm: 80,
+    labelWidthMm: 80,
+    labelHeightMm: 12,
+    dumbbellLeftMm: 30,
+    dumbbellBridgeMm: 20,
+    dumbbellRightMm: 30,
+    columnsPerRow: 1,
+    gapMm: 0,
+    leadingMarginMm: 0,
+    rowPitchGapMm: 3,
+    /** Set true only if REVARA/MRP pads print on the wrong side. */
+    dumbbellMirrorForPrint: false,
+    printOffsetXMm: 0,
+    printOffsetYMm: 0,
+  },
   custom: {
     id: 'custom' as const,
     label: 'Custom',
@@ -112,6 +150,15 @@ export interface LabelDimensions {
   labelHeightMm: number;
   columnsPerRow: number;
   gapMm: number;
+  layout?: LabelLayout;
+  /** Total die-cut row width on the roll (mm). */
+  stockWidthMm?: number;
+  /** Dumbbell: left printable pad width (mm). */
+  dumbbellLeftMm?: number;
+  /** Dumbbell: center bridge / non-print gap (mm). */
+  dumbbellBridgeMm?: number;
+  /** Dumbbell: right printable pad width (mm). */
+  dumbbellRightMm?: number;
   /** Space before the first label on each row (mm). */
   leadingMarginMm?: number;
   /** Vertical gap between printed label strips / rows (mm). */
@@ -122,10 +169,54 @@ export interface LabelDimensions {
   printOffsetXMm?: number;
   /** Print-only vertical nudge (mm). Negative = up. */
   printOffsetYMm?: number;
+  /** Swap pad order when printing (fixes mirrored label printers). */
+  dumbbellMirrorForPrint?: boolean;
+}
+
+export function isDumbbellLayout(dimensions: LabelDimensions): boolean {
+  return dimensions.layout === 'dumbbell';
+}
+
+export function getDumbbellStockWidthMm(dimensions: LabelDimensions): number {
+  if (dimensions.stockWidthMm) return dimensions.stockWidthMm;
+  return (dimensions.dumbbellLeftMm ?? 30) + (dimensions.dumbbellBridgeMm ?? 20) + (dimensions.dumbbellRightMm ?? 30);
+}
+
+/** Build label dimensions from a preset (excludes custom). */
+export function dimensionsFromPreset(formatId: Exclude<LabelFormatId, 'custom'>): LabelDimensions {
+  const p = LABEL_FORMAT_PRESETS[formatId];
+  return {
+    labelWidthMm: p.labelWidthMm,
+    labelHeightMm: p.labelHeightMm,
+    columnsPerRow: p.columnsPerRow,
+    gapMm: p.gapMm,
+    layout: 'layout' in p ? p.layout : undefined,
+    stockWidthMm: 'stockWidthMm' in p ? p.stockWidthMm : undefined,
+    dumbbellLeftMm: 'dumbbellLeftMm' in p ? p.dumbbellLeftMm : undefined,
+    dumbbellBridgeMm: 'dumbbellBridgeMm' in p ? p.dumbbellBridgeMm : undefined,
+    dumbbellRightMm: 'dumbbellRightMm' in p ? p.dumbbellRightMm : undefined,
+    leadingMarginMm: 'leadingMarginMm' in p ? p.leadingMarginMm : undefined,
+    rowGapMm: 'rowGapMm' in p ? p.rowGapMm : undefined,
+    rowPitchGapMm: 'rowPitchGapMm' in p ? p.rowPitchGapMm : undefined,
+    printOffsetXMm: 'printOffsetXMm' in p ? p.printOffsetXMm : undefined,
+    printOffsetYMm: 'printOffsetYMm' in p ? p.printOffsetYMm : undefined,
+    dumbbellMirrorForPrint: 'dumbbellMirrorForPrint' in p ? p.dumbbellMirrorForPrint : undefined,
+  };
+}
+
+/** Page height for @page — includes row pitch gap on dumbbell rolls. */
+export function getLabelPageHeightMm(dimensions: LabelDimensions): number {
+  if (isDumbbellLayout(dimensions)) {
+    return getLabelRowPitchMm(dimensions);
+  }
+  return dimensions.labelHeightMm;
 }
 
 /** Total printable row width including leading margin and gaps. */
 export function getLabelRowWidthMm(dimensions: LabelDimensions): number {
+  if (isDumbbellLayout(dimensions)) {
+    return (dimensions.leadingMarginMm ?? 0) + getDumbbellStockWidthMm(dimensions);
+  }
   const leading = dimensions.leadingMarginMm ?? 0;
   const gaps = dimensions.gapMm * Math.max(0, dimensions.columnsPerRow - 1);
   return leading + dimensions.labelWidthMm * dimensions.columnsPerRow + gaps;

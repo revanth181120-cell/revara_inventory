@@ -19,11 +19,28 @@ export interface LabelSizing {
 
 /** Scale text and barcode to label dimensions (base layout: 50×25 mm). */
 export function getLabelSizing(dimensions: LabelDimensions, forPrint = false): LabelSizing {
+  if (dimensions.layout === 'dumbbell') {
+    return {
+      paddingMm: forPrint ? 4.5 : 4.6,
+      paddingTopMm: forPrint ? 0.35 : 0.5,
+      paddingBottomMm: forPrint ? 0.35 : 0.5,
+      textInsetMm: forPrint ? 0.8 : 1.0,
+      brandPx: forPrint ? 14 : 15,
+      codePx: forPrint ? 15 : 16,
+      pricePx: forPrint ? 18 : 19,
+      mrpPx: forPrint ? 12 : 13,
+      offerPx: 0,
+      barcodeWidth: 0,
+      barcodeHeight: 0,
+      sectionGapMm: forPrint ? 0.2 : 0.25,
+    };
+  }
+
   const scale = Math.min(dimensions.labelWidthMm / 50, dimensions.labelHeightMm / 25);
 
   return {
-    paddingMm: forPrint ? 0.2 : 1,
-    paddingTopMm: forPrint ? 0.2 : 1,
+    paddingMm: forPrint ? 1.5 : 1,
+    paddingTopMm: forPrint ? 5.5 : 1,
     paddingBottomMm: forPrint ? 0.2 : 1,
     textInsetMm: forPrint ? 1.5 : 2,
     brandPx: Math.round((forPrint ? 14 : 16) * scale),
@@ -33,11 +50,15 @@ export function getLabelSizing(dimensions: LabelDimensions, forPrint = false): L
     offerPx: Math.round((forPrint ? 10 : 11) * scale),
     barcodeWidth: Math.max(1.0, (forPrint ? 1.4 : 1.6) * scale),
     barcodeHeight: Math.round(Math.min(dimensions.labelHeightMm * (forPrint ? 0.50 : 0.62), (forPrint ? 16 : 20) * scale)),
-    sectionGapMm: forPrint ? 3.0 : 3.0,
+    sectionGapMm: forPrint ? 4.0 : 4.0,
   };
 }
 
 export function buildLabelPrintCss(dimensions: LabelDimensions, forPrint = false): string {
+  if (dimensions.layout === 'dumbbell') {
+    return buildDumbbellLabelPrintCss(dimensions, forPrint);
+  }
+
   const s = getLabelSizing(dimensions, forPrint);
   const { labelWidthMm, labelHeightMm, printOffsetXMm = 0, printOffsetYMm = 0 } = dimensions;
   const padTop = forPrint ? s.paddingTopMm : s.paddingMm;
@@ -99,6 +120,104 @@ export function buildLabelPrintCss(dimensions: LabelDimensions, forPrint = false
       font-size: ${s.offerPx}px; margin-right: ${s.textInsetMm}mm;
       justify-self: end; text-align: right;
       max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+  `;
+}
+
+function buildDumbbellLabelPrintCss(dimensions: LabelDimensions, forPrint = false): string {
+  const s = getLabelSizing(dimensions, forPrint);
+  const {
+    labelHeightMm,
+    dumbbellLeftMm = 30,
+    dumbbellBridgeMm = 20,
+    dumbbellRightMm = 30,
+    printOffsetXMm = 0,
+    printOffsetYMm = 0,
+  } = dimensions;
+  const stockWidthMm = dumbbellLeftMm + dumbbellBridgeMm + dumbbellRightMm;
+  const padY = forPrint ? s.paddingTopMm : s.paddingMm;
+  const padX = s.paddingMm;
+  const nudge = forPrint && (printOffsetXMm || printOffsetYMm)
+    ? `transform: translate(${printOffsetXMm}mm, ${printOffsetYMm}mm);`
+    : '';
+
+  return `
+    .tt-dumbbell {
+      width: ${stockWidthMm}mm;
+      height: ${labelHeightMm}mm;
+      max-height: ${labelHeightMm}mm;
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      background: white;
+      border: none;
+      overflow: hidden;
+      box-sizing: border-box;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      break-inside: avoid;
+      direction: ltr;
+      unicode-bidi: isolate;
+      ${nudge}
+    }
+    .tt-dumbbell__left {
+      width: ${dumbbellLeftMm}mm;
+      height: ${labelHeightMm}mm;
+      box-sizing: border-box;
+      padding: ${padY}mm ${padX}mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: ${s.sectionGapMm}mm;
+      overflow: hidden;
+    }
+    .tt-dumbbell__bridge {
+      width: ${dumbbellBridgeMm}mm;
+      height: ${labelHeightMm}mm;
+      flex: 0 0 ${dumbbellBridgeMm}mm;
+    }
+    .tt-dumbbell__right {
+      width: ${dumbbellRightMm}mm;
+      height: ${labelHeightMm}mm;
+      box-sizing: border-box;
+      padding: ${padY}mm ${padX}mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .tt-dumbbell__brand {
+      font-size: ${s.brandPx}px;
+      font-weight: bold;
+      letter-spacing: 0.3px;
+      line-height: 1;
+      padding-left: ${s.textInsetMm}mm;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      direction: ltr;
+      unicode-bidi: plaintext;
+    }
+    .tt-dumbbell__code {
+      font-size: ${s.codePx}px;
+      font-family: monospace;
+      font-weight: 700;
+      line-height: 1;
+      padding-left: ${s.textInsetMm}mm;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      direction: ltr;
+      unicode-bidi: plaintext;
+    }
+    .tt-dumbbell__mrp {
+      font-size: ${s.mrpPx}px;
+      font-weight: bold;
+      line-height: 1;
+      text-align: center;
+      white-space: nowrap;
+      direction: ltr;
+      unicode-bidi: plaintext;
     }
   `;
 }

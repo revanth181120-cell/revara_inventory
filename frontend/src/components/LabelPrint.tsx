@@ -1,6 +1,6 @@
 import React from 'react';
 import Barcode from 'react-barcode';
-import { Product, LabelDimensions, getLabelRowWidthMm } from '../types/Product';
+import { Product, LabelDimensions, getLabelRowWidthMm, isDumbbellLayout, getDumbbellStockWidthMm } from '../types/Product';
 import { getLabelSizing } from '../utils/labelSizing';
 
 interface LabelPrintProps {
@@ -9,7 +9,87 @@ interface LabelPrintProps {
   forPrint?: boolean;
 }
 
+function DumbbellLabelPrint({ product, dimensions, forPrint = false }: LabelPrintProps) {
+  const {
+    labelHeightMm,
+    dumbbellLeftMm = 30,
+    dumbbellBridgeMm = 20,
+    dumbbellRightMm = 30,
+    printOffsetXMm = 0,
+    printOffsetYMm = 0,
+    dumbbellMirrorForPrint = false,
+  } = dimensions;
+  const sizing = getLabelSizing(dimensions, forPrint);
+  const stockWidthMm = getDumbbellStockWidthMm(dimensions);
+  const padY = forPrint ? sizing.paddingTopMm : sizing.paddingMm;
+  const padX = sizing.paddingMm;
+  const mirror = forPrint && dumbbellMirrorForPrint;
+  const nudge = forPrint && (printOffsetXMm || printOffsetYMm)
+    ? { transform: `translate(${printOffsetXMm}mm, ${printOffsetYMm}mm)` }
+    : {};
+
+  const brandPad = (
+    <div
+      className="tt-dumbbell__left"
+      style={{
+        width: `${dumbbellLeftMm}mm`,
+        height: `${labelHeightMm}mm`,
+        padding: `${padY}mm ${padX}mm`,
+        gap: `${sizing.sectionGapMm}mm`,
+      }}
+    >
+      <strong
+        className="tt-dumbbell__brand"
+        style={{ fontSize: sizing.brandPx, paddingLeft: `${sizing.textInsetMm}mm` }}
+      >
+        REVARA
+      </strong>
+      <span
+        className="tt-dumbbell__code"
+        style={{ fontSize: sizing.codePx, paddingLeft: `${sizing.textInsetMm}mm` }}
+      >
+        {product.code}
+      </span>
+    </div>
+  );
+
+  const mrpPad = (
+    <div
+      className="tt-dumbbell__right"
+      style={{
+        width: `${dumbbellRightMm}mm`,
+        height: `${labelHeightMm}mm`,
+        padding: `${padY}mm ${padX}mm`,
+      }}
+    >
+      <div className="tt-dumbbell__mrp" style={{ fontSize: sizing.mrpPx }}>
+        MRP: ₹{product.sellingPrice.toLocaleString('en-IN')}
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      className="tt-dumbbell"
+      style={{
+        width: `${stockWidthMm}mm`,
+        height: `${labelHeightMm}mm`,
+        boxSizing: 'border-box',
+        ...nudge,
+      }}
+    >
+      {mirror ? mrpPad : brandPad}
+      <div className="tt-dumbbell__bridge" style={{ width: `${dumbbellBridgeMm}mm`, height: `${labelHeightMm}mm` }} aria-hidden />
+      {mirror ? brandPad : mrpPad}
+    </div>
+  );
+}
+
 export const LabelPrint: React.FC<LabelPrintProps> = ({ product, dimensions, forPrint = false }) => {
+  if (isDumbbellLayout(dimensions)) {
+    return <DumbbellLabelPrint product={product} dimensions={dimensions} forPrint={forPrint} />;
+  }
+
   const { labelWidthMm, labelHeightMm, printOffsetXMm = 0, printOffsetYMm = 0 } = dimensions;
   const sizing = getLabelSizing(dimensions, forPrint);
   const padTop = forPrint ? sizing.paddingTopMm : sizing.paddingMm;
@@ -66,6 +146,7 @@ interface LabelSheetProps {
 
 function LabelRow({
   row,
+  rowIdx,
   dimensions,
   rowWidthMm,
   labelHeightMm,
@@ -75,6 +156,7 @@ function LabelRow({
   forPrint,
 }: {
   row: Product[];
+  rowIdx: number;
   dimensions: LabelDimensions;
   rowWidthMm: number;
   labelHeightMm: number;
@@ -83,10 +165,12 @@ function LabelRow({
   leadingMarginMm: number;
   forPrint: boolean;
 }) {
-  const labelWidthMm = dimensions.labelWidthMm;
+  const rowLabelWidthMm = isDumbbellLayout(dimensions)
+    ? getDumbbellStockWidthMm(dimensions)
+    : dimensions.labelWidthMm;
   const rowStyle: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: `repeat(${columnsPerRow}, ${labelWidthMm}mm)`,
+    gridTemplateColumns: `repeat(${columnsPerRow}, ${rowLabelWidthMm}mm)`,
     gap: `${gapMm}mm`,
     paddingLeft: `${leadingMarginMm}mm`,
     width: `${rowWidthMm}mm`,
@@ -96,7 +180,7 @@ function LabelRow({
   };
 
   const spacerStyle: React.CSSProperties = {
-    width: `${labelWidthMm}mm`,
+    width: `${rowLabelWidthMm}mm`,
     height: `${labelHeightMm}mm`,
     visibility: 'hidden',
     pointerEvents: 'none',
@@ -104,8 +188,13 @@ function LabelRow({
 
   return (
     <div className="label-row" style={rowStyle}>
-      {row.map((product) => (
-        <LabelPrint key={product.id} product={product} dimensions={dimensions} forPrint={forPrint} />
+      {row.map((product, colIdx) => (
+        <LabelPrint
+          key={`${rowIdx}-${colIdx}-${product.id}`}
+          product={product}
+          dimensions={dimensions}
+          forPrint={forPrint}
+        />
       ))}
       {row.length < columnsPerRow &&
         Array.from({ length: columnsPerRow - row.length }).map((_, i) => (
@@ -131,7 +220,7 @@ export const LabelSheet: React.FC<LabelSheetProps> = ({ products, dimensions, cl
     columnsPerRow,
     gapMm,
     leadingMarginMm,
-    forPrint: true,
+    forPrint: isPrint,
   };
 
   if (isPrint) {
@@ -139,7 +228,7 @@ export const LabelSheet: React.FC<LabelSheetProps> = ({ products, dimensions, cl
       <div className={`labels-container ${className}`}>
         {rows.map((row, rowIdx) => (
           <div key={rowIdx} className="print-page">
-            <LabelRow row={row} {...rowProps} />
+            <LabelRow row={row} rowIdx={rowIdx} {...rowProps} />
           </div>
         ))}
       </div>
@@ -148,12 +237,12 @@ export const LabelSheet: React.FC<LabelSheetProps> = ({ products, dimensions, cl
 
   return (
     <div className={`labels-container ${className}`}>
-      {rows.map((row, rowIdx) => (
-        <div key={rowIdx} className="label-preview-page">
-          <div className="label-preview-page__tag">Page {rowIdx + 1}</div>
-          <LabelRow row={row} {...rowProps} />
-        </div>
-      ))}
+        {rows.map((row, rowIdx) => (
+          <div key={rowIdx} className="label-preview-page">
+            <div className="label-preview-page__tag">Page {rowIdx + 1}</div>
+            <LabelRow row={row} rowIdx={rowIdx} {...rowProps} />
+          </div>
+        ))}
     </div>
   );
 };

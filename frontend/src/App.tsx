@@ -223,7 +223,7 @@ function App() {
       )}
       {modal === 'print-all' && (
         <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal modal--full" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal--full modal--print-labels" onClick={(e) => e.stopPropagation()}>
             <BarcodePrintPage
               products={products}
               onClose={closeModal}
