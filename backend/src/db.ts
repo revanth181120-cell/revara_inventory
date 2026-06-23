@@ -1,7 +1,25 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 
-const DB_PATH = path.join(__dirname, '..', 'database', 'inventory.db');
+const DB_PATH = process.env.INVENTORY_DB_PATH || path.join(__dirname, '..', 'database', 'inventory.db');
+
+export class InvalidSyncPayloadError extends Error {
+  statusCode = 400;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidSyncPayloadError';
+  }
+}
+
+export class EmptySyncRejectedError extends Error {
+  statusCode = 409;
+
+  constructor(tableName: string) {
+    super(`Refusing to replace non-empty ${tableName} table with an empty sync payload. Use force=1 to clear it explicitly.`);
+    this.name = 'EmptySyncRejectedError';
+  }
+}
 
 export interface DbProduct {
   id: string;
@@ -39,6 +57,29 @@ function all<T>(db: sqlite3.Database, sql: string, params: unknown[] = []): Prom
   return new Promise((resolve, reject) => {
     db.all(sql, params, (err, rows) => (err ? reject(err) : resolve(rows as T[])));
   });
+}
+
+function get<T>(db: sqlite3.Database, sql: string, params: unknown[] = []): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => (err ? reject(err) : resolve(row as T | undefined)));
+  });
+}
+
+async function countRows(db: sqlite3.Database, tableName: 'products' | 'sales'): Promise<number> {
+  const row = await get<{ count: number }>(db, `SELECT COUNT(*) AS count FROM ${tableName}`);
+  return row?.count ?? 0;
+}
+
+async function rejectAccidentalEmptyReplace(
+  db: sqlite3.Database,
+  tableName: 'products' | 'sales',
+  incomingCount: number,
+  allowEmpty: boolean
+) {
+  if (incomingCount > 0 || allowEmpty) return;
+  if (await countRows(db, tableName) > 0) {
+    throw new EmptySyncRejectedError(tableName);
+  }
 }
 
 export async function initDatabase(): Promise<sqlite3.Database> {
@@ -136,7 +177,15 @@ export async function getAllSales(db: sqlite3.Database) {
   return rows.map(toApiSale);
 }
 
-export async function syncProducts(db: sqlite3.Database, products: ReturnType<typeof toApiProduct>[]) {
+export interface SyncOptions {
+  allowEmpty?: boolean;
+}
+
+export async function syncProducts(db: sqlite3.Database, products: ReturnType<typeof toApiProduct>[], options: SyncOptions = {}) {
+  if (!Array.isArray(products)) {
+    throw new InvalidSyncPayloadError('Products sync payload must be an array.');
+  }
+  await rejectAccidentalEmptyReplace(db, 'products', products.length, options.allowEmpty ?? false);
   await run(db, 'BEGIN TRANSACTION');
   try {
     await run(db, 'DELETE FROM products');
@@ -155,7 +204,11 @@ export async function syncProducts(db: sqlite3.Database, products: ReturnType<ty
   }
 }
 
-export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof toApiSale>[]) {
+export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof toApiSale>[], options: SyncOptions = {}) {
+  if (!Array.isArray(sales)) {
+    throw new InvalidSyncPayloadError('Sales sync payload must be an array.');
+  }
+  await rejectAccidentalEmptyReplace(db, 'sales', sales.length, options.allowEmpty ?? false);
   await run(db, 'BEGIN TRANSACTION');
   try {
     await run(db, 'DELETE FROM sales');

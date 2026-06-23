@@ -7,9 +7,22 @@ import {
   syncProducts,
   syncSales,
   getSuppliers,
+  InvalidSyncPayloadError,
+  EmptySyncRejectedError,
 } from './db';
 
 const PORT = process.env.PORT || 3001;
+
+function allowsEmptySync(value: unknown): boolean {
+  return value === '1' || value === 'true';
+}
+
+function syncErrorStatus(err: unknown): number {
+  if (err instanceof InvalidSyncPayloadError || err instanceof EmptySyncRejectedError) {
+    return err.statusCode;
+  }
+  return 500;
+}
 
 async function main() {
   const db = await initDatabase();
@@ -51,19 +64,19 @@ async function main() {
 
   app.post('/api/products/sync', async (req, res) => {
     try {
-      await syncProducts(db, req.body);
+      await syncProducts(db, req.body, { allowEmpty: allowsEmptySync(req.query.force) });
       res.json({ success: true, count: req.body.length });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      res.status(syncErrorStatus(err)).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
   app.post('/api/sales/sync', async (req, res) => {
     try {
-      await syncSales(db, req.body);
+      await syncSales(db, req.body, { allowEmpty: allowsEmptySync(req.query.force) });
       res.json({ success: true, count: req.body.length });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      res.status(syncErrorStatus(err)).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
