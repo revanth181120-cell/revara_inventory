@@ -47,18 +47,32 @@ export async function fetchSales(): Promise<ApiSale[]> {
   return res.json();
 }
 
+async function assertSyncSucceeded(res: Response, label: string): Promise<void> {
+  if (res.ok) return;
+  let message = `${label} sync failed`;
+  try {
+    const body = await res.json();
+    if (body?.error) message = `${message}: ${body.error}`;
+  } catch {
+    // Keep the generic message when the API does not return JSON.
+  }
+  throw new Error(message);
+}
+
 export async function syncProducts(products: ApiProduct[]): Promise<void> {
-  await fetch(`${API_BASE}/products/sync`, {
+  const res = await fetch(`${API_BASE}/products/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(products),
   });
+  await assertSyncSucceeded(res, 'Products');
 }
 
 export async function syncSales(sales: ApiSale[]): Promise<void> {
-  await fetch(`${API_BASE}/sales/sync`, {
+  const res = await fetch(`${API_BASE}/sales/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sales),
   });
+  await assertSyncSucceeded(res, 'Sales');
 }
