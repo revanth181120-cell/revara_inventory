@@ -34,6 +34,7 @@ function App() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [quickSellActive, setQuickSellActive] = useState(false);
   const [lastScanResult, setLastScanResult] = useState<LastScanResult | null>(null);
+  const [importPreviewOpen, setImportPreviewOpen] = useState(false);
   const lastScanRef = useRef<{ code: string; at: number } | null>(null);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -68,8 +69,7 @@ function App() {
     }
   }, [sellProductByCode]);
 
-  const hardwareScannerEnabled =
-    quickSellActive && modal !== 'add' && modal !== 'edit' && modal !== 'scanner';
+  const hardwareScannerEnabled = quickSellActive && modal === null && !importPreviewOpen;
 
   useHardwareScanner({
     enabled: hardwareScannerEnabled,
@@ -153,7 +153,7 @@ function App() {
             {apiConnected ? 'SQLite' : 'Local'}
           </span>
           <ExportInventory onExportExcel={exportToExcel} onExportJson={exportToJson} onExportSales={exportSalesToExcel} />
-          <ImportExcel onImport={handleImportProducts} />
+          <ImportExcel onImport={handleImportProducts} onPreviewChange={setImportPreviewOpen} />
           <button className="btn btn--outline" onClick={() => setModal('print-all')}>
             <Tag size={15} /> Print Labels
           </button>

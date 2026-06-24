@@ -6,11 +6,17 @@ import { parseExcelRows, ImportSummary } from '../utils/importExcel';
 
 type Props = {
   onImport: (products: ProductFormData[]) => void;
+  onPreviewChange?: (open: boolean) => void;
 };
 
-function ImportExcel({ onImport }: Props) {
+function ImportExcel({ onImport, onPreviewChange }: Props) {
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const closePreview = () => {
+    setSummary(null);
+    onPreviewChange?.(false);
+  };
 
   const handleExcelImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -27,8 +33,10 @@ function ImportExcel({ onImport }: Props) {
         const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(worksheet);
         const result = parseExcelRows(rows);
         setSummary(result);
+        onPreviewChange?.(true);
       } catch {
         setSummary({ valid: [], errors: [{ row: 0, error: 'Failed to read Excel file. Check the format.' }], warnings: [], skipped: 0, detectedColumns: [] });
+        onPreviewChange?.(true);
       }
       setLoading(false);
       event.target.value = '';
@@ -40,7 +48,7 @@ function ImportExcel({ onImport }: Props) {
     if (summary && summary.valid.length > 0) {
       onImport(summary.valid);
     }
-    setSummary(null);
+    closePreview();
   };
 
   return (
@@ -62,11 +70,11 @@ function ImportExcel({ onImport }: Props) {
       />
 
       {summary && (
-        <div className="modal-overlay" onClick={() => setSummary(null)}>
+        <div className="modal-overlay" onClick={closePreview}>
           <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
             <div className="modal__header">
               <h2 className="modal__title">Import Preview</h2>
-              <button className="btn-icon" onClick={() => setSummary(null)}><X size={18} /></button>
+              <button className="btn-icon" onClick={closePreview}><X size={18} /></button>
             </div>
 
             <div className="import-summary">
@@ -160,7 +168,7 @@ function ImportExcel({ onImport }: Props) {
             )}
 
             <div className="form-actions" style={{ padding: '16px 24px 24px' }}>
-              <button className="btn btn--ghost" onClick={() => setSummary(null)}>Cancel</button>
+              <button className="btn btn--ghost" onClick={closePreview}>Cancel</button>
               <button
                 className="btn btn--primary"
                 onClick={confirmImport}
