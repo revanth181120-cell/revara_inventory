@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BarcodeScanner } from './BarcodeScanner';
 import { Product } from '../types/Product';
@@ -68,7 +68,7 @@ describe('BarcodeScanner', () => {
       />
     );
 
-    await waitFor(() => expect(html5QrCodeMock.start).toHaveBeenCalledTimes(1));
+    expect(html5QrCodeMock.start).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       html5QrCodeMock.onSuccess?.(product.code);
