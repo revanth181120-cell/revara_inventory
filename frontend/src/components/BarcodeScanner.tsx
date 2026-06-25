@@ -136,12 +136,6 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     manualInputRef.current?.focus();
   };
 
-  useEffect(() => {
-    if (scanState !== 'sold' || !autoSell) return;
-    const timer = setTimeout(() => { void handleRescan(); }, 1500);
-    return () => clearTimeout(timer);
-  }, [scanState, autoSell]);
-
   const handleManualInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && manualInput.trim()) {
       pausedRef.current = true;
