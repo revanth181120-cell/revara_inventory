@@ -11,11 +11,11 @@ const html5QrCodeMock = vi.hoisted(() => ({
 }));
 
 vi.mock('html5-qrcode', () => ({
-  Html5Qrcode: vi.fn().mockImplementation(() => ({
-    start: html5QrCodeMock.start,
-    stop: html5QrCodeMock.stop,
-    getState: html5QrCodeMock.getState,
-  })),
+  Html5Qrcode: class {
+    start = html5QrCodeMock.start;
+    stop = html5QrCodeMock.stop;
+    getState = html5QrCodeMock.getState;
+  },
 }));
 
 const product: Product = {
