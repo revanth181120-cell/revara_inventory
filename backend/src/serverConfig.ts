@@ -1,6 +1,7 @@
 import { CorsOptions } from 'cors';
 
 const DEFAULT_API_HOST = '127.0.0.1';
+const DEFAULT_API_PORT = 3001;
 
 const DEFAULT_ALLOWED_CORS_ORIGINS = [
   'http://localhost:5173',
@@ -11,6 +12,17 @@ const DEFAULT_ALLOWED_CORS_ORIGINS = [
 
 export function resolveApiHost(env: NodeJS.ProcessEnv = process.env): string {
   return env.HOST?.trim() || env.API_HOST?.trim() || DEFAULT_API_HOST;
+}
+
+export function resolveApiPort(env: NodeJS.ProcessEnv = process.env): number {
+  const rawPort = env.PORT?.trim();
+  if (!rawPort) return DEFAULT_API_PORT;
+
+  const port = Number(rawPort);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error(`Invalid PORT: ${rawPort}`);
+  }
+  return port;
 }
 
 export function parseAllowedCorsOrigins(rawOrigins: string | undefined = process.env.CORS_ORIGIN): Set<string> {

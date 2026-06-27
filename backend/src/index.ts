@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { buildCorsOptions, resolveApiHost } from './serverConfig';
+import { buildCorsOptions, resolveApiHost, resolveApiPort } from './serverConfig';
 import {
   initDatabase,
   getAllProducts,
@@ -10,12 +10,11 @@ import {
   getSuppliers,
 } from './db';
 
-const PORT = process.env.PORT || 3001;
-
 async function main() {
   const db = await initDatabase();
   const app = express();
   const host = resolveApiHost();
+  const port = resolveApiPort();
 
   app.use(cors(buildCorsOptions()));
   app.use(express.json({ limit: '50mb' }));
@@ -69,8 +68,8 @@ async function main() {
     }
   });
 
-  app.listen(PORT, host, () => {
-    console.log(`Revara API running on http://${host}:${PORT}`);
+  app.listen(port, host, () => {
+    console.log(`Revara API running on http://${host}:${port}`);
   });
 }
 
