@@ -158,10 +158,16 @@ export async function syncProducts(db: sqlite3.Database, products: ReturnType<ty
 export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof toApiSale>[]) {
   await run(db, 'BEGIN TRANSACTION');
   try {
-    await run(db, 'DELETE FROM sales');
     for (const s of sales) {
       await run(db, `INSERT INTO sales (id, product_code, product_name, quantity_sold, sale_price, cost_price, sale_datetime)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`, [
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          product_code = excluded.product_code,
+          product_name = excluded.product_name,
+          quantity_sold = excluded.quantity_sold,
+          sale_price = excluded.sale_price,
+          cost_price = excluded.cost_price,
+          sale_datetime = excluded.sale_datetime`, [
         s.id, s.productCode, s.productName, s.quantitySold,
         s.salePrice, s.costPrice, s.saleDateTime,
       ]);
