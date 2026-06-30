@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useInventory } from './hooks/useInventory';
 import { useHardwareScanner, normalizeScannedCode } from './hooks/useHardwareScanner';
 import { Dashboard } from './components/Dashboard';
@@ -34,7 +34,6 @@ function App() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [quickSellActive, setQuickSellActive] = useState(false);
   const [lastScanResult, setLastScanResult] = useState<LastScanResult | null>(null);
-  const lastScanRef = useRef<{ code: string; at: number } | null>(null);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -46,8 +45,6 @@ function App() {
     if (!code) return;
 
     const now = Date.now();
-    if (lastScanRef.current?.code === code && now - lastScanRef.current.at < 1500) return;
-    lastScanRef.current = { code, at: now };
 
     const result = sellProductByCode(code, 1);
     if (result.success && result.product) {
