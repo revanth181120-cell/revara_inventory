@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Product, SaleRecord, ProductFormData, parseSupplierFromCode, getSalePrice } from '../types/Product';
+import { parseSupplierFromCode, getSalePrice } from '../types/Product';
+import type { Product, SaleRecord, ProductFormData } from '../types/Product';
 import { checkApiHealth, fetchProducts, fetchSales, syncProducts, syncSales } from '../api/inventoryApi';
 
 const PRODUCTS_KEY = 'revara_products';
