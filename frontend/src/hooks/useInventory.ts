@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Product, SaleRecord, ProductFormData, parseSupplierFromCode, getSalePrice } from '../types/Product';
+import { parseSupplierFromCode, getSalePrice } from '../types/Product';
+import type { Product, SaleRecord, ProductFormData } from '../types/Product';
 import { checkApiHealth, fetchProducts, fetchSales, syncProducts, syncSales } from '../api/inventoryApi';
 
 const PRODUCTS_KEY = 'revara_products';
 const SALES_KEY = 'revara_sales';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+type StorageLoad<T> = {
+  value: T;
+  canPersistInitialValue: boolean;
+};
 
 function normalizeProduct(raw: Partial<Product> & { code: string; name: string }): Product {
   const now = new Date().toISOString();
@@ -31,6 +37,40 @@ function migrateStoredProducts(stored: unknown[]): Product[] {
   return stored.map((item) => normalizeProduct(item as Partial<Product> & { code: string; name: string }));
 }
 
+function normalizeStoredSales(stored: unknown[]): SaleRecord[] {
+  return stored.map((item) => {
+    const sale = item as SaleRecord;
+    return { ...sale, costPrice: sale.costPrice ?? 0 };
+  });
+}
+
+function readStoredArray<T>(key: string, normalize: (stored: unknown[]) => T[]): StorageLoad<T[]> {
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) {
+      return { value: [], canPersistInitialValue: true };
+    }
+
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) {
+      throw new Error(`${key} must contain an array`);
+    }
+
+    return { value: normalize(parsed), canPersistInitialValue: true };
+  } catch (error) {
+    console.error(`Unable to load ${key} from localStorage; preserving the saved value.`, error);
+    return { value: [], canPersistInitialValue: false };
+  }
+}
+
+function writeStoredArray<T>(key: string, value: T[]): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`Unable to save ${key} to localStorage.`, error);
+  }
+}
+
 function isSameDay(iso: string, date: Date): boolean {
   const d = new Date(iso);
   return (
@@ -49,32 +89,41 @@ export function useInventory() {
   const [apiConnected, setApiConnected] = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readyForSync = useRef(false);
+  const productsStorageLoad = useRef<StorageLoad<Product[]> | null>(null);
+  const salesStorageLoad = useRef<StorageLoad<SaleRecord[]> | null>(null);
 
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      const stored = localStorage.getItem(PRODUCTS_KEY);
-      return stored ? migrateStoredProducts(JSON.parse(stored)) : [];
-    } catch {
-      return [];
-    }
-  });
+  if (productsStorageLoad.current === null) {
+    productsStorageLoad.current = readStoredArray(PRODUCTS_KEY, migrateStoredProducts);
+  }
+  if (salesStorageLoad.current === null) {
+    salesStorageLoad.current = readStoredArray(SALES_KEY, normalizeStoredSales);
+  }
 
-  const [sales, setSales] = useState<SaleRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(SALES_KEY);
-      const parsed: SaleRecord[] = stored ? JSON.parse(stored) : [];
-      return parsed.map((s) => ({ ...s, costPrice: s.costPrice ?? 0 }));
-    } catch {
-      return [];
-    }
-  });
+  const loadedProducts = productsStorageLoad.current;
+  const loadedSales = salesStorageLoad.current;
+  const initialProductsRef = useRef(loadedProducts.value);
+  const initialSalesRef = useRef(loadedSales.value);
+  const skipInitialProductsPersist = useRef(!loadedProducts.canPersistInitialValue);
+  const skipInitialSalesPersist = useRef(!loadedSales.canPersistInitialValue);
+
+  const [products, setProducts] = useState<Product[]>(loadedProducts.value);
+
+  const [sales, setSales] = useState<SaleRecord[]>(loadedSales.value);
 
   useEffect(() => {
-    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+    if (skipInitialProductsPersist.current && products === initialProductsRef.current) {
+      return;
+    }
+    skipInitialProductsPersist.current = false;
+    writeStoredArray(PRODUCTS_KEY, products);
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem(SALES_KEY, JSON.stringify(sales));
+    if (skipInitialSalesPersist.current && sales === initialSalesRef.current) {
+      return;
+    }
+    skipInitialSalesPersist.current = false;
+    writeStoredArray(SALES_KEY, sales);
   }, [sales]);
 
   // Load from SQLite API on startup, fallback to localStorage
