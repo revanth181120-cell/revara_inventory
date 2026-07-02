@@ -31,6 +31,36 @@ function migrateStoredProducts(stored: unknown[]): Product[] {
   return stored.map((item) => normalizeProduct(item as Partial<Product> & { code: string; name: string }));
 }
 
+function productsWithoutImages(products: Product[]): Product[] {
+  return products.map((product) => {
+    if (!product.imageUrl) return product;
+    const copy = { ...product };
+    delete copy.imageUrl;
+    return copy;
+  });
+}
+
+function persistProductsToLocalStorage(products: Product[]): void {
+  try {
+    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+  } catch (error) {
+    try {
+      localStorage.setItem(PRODUCTS_KEY, JSON.stringify(productsWithoutImages(products)));
+      console.warn('Product images exceeded local backup storage; saved inventory without images.', error);
+    } catch (fallbackError) {
+      console.error('Unable to save products to local backup.', fallbackError);
+    }
+  }
+}
+
+function persistSalesToLocalStorage(sales: SaleRecord[]): void {
+  try {
+    localStorage.setItem(SALES_KEY, JSON.stringify(sales));
+  } catch (error) {
+    console.error('Unable to save sales to local backup.', error);
+  }
+}
+
 function isSameDay(iso: string, date: Date): boolean {
   const d = new Date(iso);
   return (
@@ -70,11 +100,11 @@ export function useInventory() {
   });
 
   useEffect(() => {
-    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+    persistProductsToLocalStorage(products);
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem(SALES_KEY, JSON.stringify(sales));
+    persistSalesToLocalStorage(sales);
   }, [sales]);
 
   // Load from SQLite API on startup, fallback to localStorage
