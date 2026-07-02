@@ -7,6 +7,8 @@ import {
   syncProducts,
   syncSales,
   getSuppliers,
+  getAllWhatsappInvoices,
+  insertWhatsappInvoice,
 } from './db';
 
 const PORT = process.env.PORT || 3001;
@@ -62,6 +64,36 @@ async function main() {
     try {
       await syncSales(db, req.body);
       res.json({ success: true, count: req.body.length });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/whatsapp-invoices', async (_req, res) => {
+    try {
+      const invoices = await getAllWhatsappInvoices(db);
+      res.json(invoices);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/whatsapp-invoices', async (req, res) => {
+    try {
+      const { id, transactionId, customerPhone, billTotal, messageText, sentAt } = req.body;
+      if (!id || !transactionId || !customerPhone || !messageText || !sentAt) {
+        res.status(400).json({ error: 'Missing required invoice fields.' });
+        return;
+      }
+      await insertWhatsappInvoice(db, {
+        id,
+        transactionId,
+        customerPhone,
+        billTotal: billTotal ?? 0,
+        messageText,
+        sentAt,
+      });
+      res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

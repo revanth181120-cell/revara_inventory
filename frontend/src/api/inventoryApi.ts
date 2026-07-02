@@ -62,3 +62,36 @@ export async function syncSales(sales: ApiSale[]): Promise<void> {
     body: JSON.stringify(sales),
   });
 }
+
+export interface WhatsappInvoiceRecord {
+  id: string;
+  transactionId: string;
+  customerPhone: string;
+  billTotal: number;
+  messageText: string;
+  sentAt: string;
+}
+
+export async function recordWhatsappInvoice(record: WhatsappInvoiceRecord): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/whatsapp-invoices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(record),
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchWhatsappInvoices(): Promise<WhatsappInvoiceRecord[]> {
+  try {
+    const res = await fetch(`${API_BASE}/whatsapp-invoices`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}

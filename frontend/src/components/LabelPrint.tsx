@@ -126,12 +126,9 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, dimensions, for
         />
       </div>
 
-      <div className="tt-label__prices">
-        <div className="tt-label__mrp" style={{ fontSize: sizing.mrpPx, marginLeft: `${sizing.textInsetMm}mm` }}>
+      <div className="tt-label__prices tt-label__prices--center">
+        <div className="tt-label__mrp tt-label__mrp--center" style={{ fontSize: sizing.mrpPx }}>
           MRP: ₹{product.sellingPrice.toLocaleString('en-IN')}
-        </div>
-        <div className="tt-label__offer" style={{ fontSize: sizing.offerPx, marginRight: `${sizing.textInsetMm}mm` }}>
-          Offer: {product.offerPrice > 0 ? `₹${product.offerPrice.toLocaleString('en-IN')}` : '—'}
         </div>
       </div>
     </div>

@@ -16,11 +16,56 @@ export interface Product {
 
 export interface SaleRecord {
   id: string;
+  transactionId?: string;
   productCode: string;
   productName: string;
+  category: string;
   quantitySold: number;
+  mrp: number;
+  offerPrice: number;
+  lineDiscount: number;
   salePrice: number;
   costPrice: number;
+  saleDateTime: string;
+  /** Sold from cart without inventory — no stock deducted */
+  isCustom?: boolean;
+  pendingStockId?: string;
+}
+
+export interface CartItem {
+  cartLineId: string;
+  isCustom?: boolean;
+  productId?: string;
+  productCode: string;
+  productName: string;
+  category: string;
+  quantity: number;
+  mrp: number;
+  offerPrice: number;
+  unitPrice: number;
+  costPrice: number;
+}
+
+/** Misc items sold but not yet in product master — add to inventory at end of day */
+export interface PendingStockItem {
+  id: string;
+  saleId: string;
+  name: string;
+  category: string;
+  quantitySold: number;
+  sellingPrice: number;
+  costPrice: number;
+  saleDateTime: string;
+  resolved: boolean;
+}
+
+export interface CompletedTransaction {
+  transactionId: string;
+  items: SaleRecord[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  profit: number;
   saleDateTime: string;
 }
 
@@ -56,7 +101,7 @@ export const SUPPLIER_MAP: Record<string, string> = {
   RD: 'Rhodium House',
 };
 
-export const CATEGORY_OPTIONS = ['All', ...Object.values(CATEGORY_MAP)];
+export const CATEGORY_OPTIONS = ['All', ...Object.values(CATEGORY_MAP), 'Misc'];
 
 export function parseSupplierFromCode(code: string): string {
   const parts = code.split('-');
@@ -70,6 +115,128 @@ export function parseSupplierFromCode(code: string): string {
 /** Price charged at sale — offer price if set, otherwise MRP/selling price */
 export function getSalePrice(product: Pick<Product, 'sellingPrice' | 'offerPrice'>): number {
   return product.offerPrice > 0 ? product.offerPrice : product.sellingPrice;
+}
+
+export function productToCartItem(product: Product, quantity = 1): CartItem {
+  return {
+    cartLineId: product.id,
+    isCustom: false,
+    productId: product.id,
+    productCode: product.code,
+    productName: product.name,
+    category: product.category || 'Uncategorized',
+    quantity,
+    mrp: product.sellingPrice,
+    offerPrice: product.offerPrice,
+    unitPrice: getSalePrice(product),
+    costPrice: product.costPrice,
+  };
+}
+
+export function createCustomCartItem(input: {
+  name: string;
+  unitPrice: number;
+  costPrice?: number;
+  quantity?: number;
+  category?: string;
+}): CartItem {
+  const cartLineId = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const unitPrice = input.unitPrice;
+  return {
+    cartLineId,
+    isCustom: true,
+    productCode: 'MISC',
+    productName: input.name.trim(),
+    category: input.category?.trim() || 'Misc',
+    quantity: Math.max(1, input.quantity ?? 1),
+    mrp: unitPrice,
+    offerPrice: 0,
+    unitPrice,
+    costPrice: input.costPrice ?? 0,
+  };
+}
+
+export function normalizeSaleRecord(raw: Partial<SaleRecord> & { productCode: string }): SaleRecord {
+  const salePrice = raw.salePrice ?? 0;
+  return {
+    id: raw.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    transactionId: raw.transactionId,
+    productCode: raw.productCode,
+    productName: raw.productName || '',
+    category: raw.category || '',
+    quantitySold: raw.quantitySold ?? 1,
+    mrp: raw.mrp ?? salePrice,
+    offerPrice: raw.offerPrice ?? 0,
+    lineDiscount: raw.lineDiscount ?? 0,
+    salePrice,
+    costPrice: raw.costPrice ?? 0,
+    saleDateTime: raw.saleDateTime || new Date().toISOString(),
+    isCustom: raw.isCustom ?? false,
+    pendingStockId: raw.pendingStockId,
+  };
+}
+
+export function saleLineProfit(sale: SaleRecord): number {
+  const sellUnit = profitUnitPrice(sale);
+  const gross = (sellUnit - sale.costPrice) * sale.quantitySold;
+  return gross - (sale.lineDiscount ?? 0);
+}
+
+export function saleLineTotal(sale: Pick<SaleRecord, 'salePrice' | 'quantitySold'>): number {
+  return sale.salePrice * sale.quantitySold;
+}
+
+/** Unit sell price used for profit — offer (or MRP) for inventory, sell price for misc */
+export function profitUnitPrice(item: CartItem | SaleRecord): number {
+  return catalogUnitPrice(item);
+}
+
+/** Profit on one cart line before overall bill discount */
+export function cartLineProfit(item: CartItem): number {
+  return (profitUnitPrice(item) - item.costPrice) * item.quantity;
+}
+
+/** Unit profit for a product master record (scanner / table) */
+export function productUnitProfit(product: Pick<Product, 'sellingPrice' | 'offerPrice' | 'costPrice'>): number {
+  return getSalePrice(product) - product.costPrice;
+}
+
+/** Human-readable label for invoice / receipt lines */
+export function invoiceLineLabel(item: Pick<SaleRecord, 'productCode' | 'productName' | 'quantitySold' | 'isCustom'>): string {
+  const qty = item.quantitySold > 1 ? ` ×${item.quantitySold}` : '';
+  if (item.isCustom) {
+    return `${item.productName}${qty}`;
+  }
+  return `${item.productCode}${qty}`;
+}
+
+/** Product has a store offer below MRP (not bill-level discount) */
+export function itemHasStoreOffer(item: Pick<SaleRecord | CartItem, 'mrp' | 'offerPrice' | 'isCustom'>): boolean {
+  return Boolean(!item.isCustom && item.offerPrice > 0 && item.offerPrice < item.mrp);
+}
+
+/** Unit price before any bill-level discount */
+export function catalogUnitPrice(item: CartItem | SaleRecord): number {
+  if (item.isCustom) {
+    if ('unitPrice' in item) return item.unitPrice;
+    const qty = Math.max(1, item.quantitySold);
+    return (item.salePrice * qty + (item.lineDiscount ?? 0)) / qty;
+  }
+  return itemHasStoreOffer(item) ? item.offerPrice : item.mrp;
+}
+
+/** Line total before bill-level discount — sums to cart/invoice subtotal */
+export function catalogLineTotal(item: CartItem | SaleRecord): number {
+  const qty = 'quantity' in item ? item.quantity : item.quantitySold;
+  return catalogUnitPrice(item) * qty;
+}
+
+/** MRP / offer text for invoice lines, e.g. "MRP ₹899 · Offer ₹699" */
+export function formatInvoicePriceDetail(item: Pick<SaleRecord | CartItem, 'mrp' | 'offerPrice' | 'isCustom'>): string {
+  if (item.isCustom) return '';
+  const mrp = `MRP ₹${item.mrp.toLocaleString('en-IN')}`;
+  if (!itemHasStoreOffer(item)) return mrp;
+  return `${mrp} · Offer ₹${item.offerPrice.toLocaleString('en-IN')}`;
 }
 
 /** One label row per unit in stock (skips quantity 0). */

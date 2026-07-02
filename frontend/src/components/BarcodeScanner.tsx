@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { Product, getSalePrice } from '../types/Product';
+import { Product, getSalePrice, productUnitProfit } from '../types/Product';
 import { useHardwareScanner, normalizeScannedCode } from '../hooks/useHardwareScanner';
 import { X, ShoppingCart, Camera, CheckCircle, AlertCircle } from 'lucide-react';
 
@@ -44,11 +44,15 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     const result = onScanSell(code, quantity);
     if (result.success && result.product) {
       setScanState('sold');
-      setStockUpdate({
-        from: result.previousQty ?? found.quantity,
-        to: result.product.quantity,
-      });
-      setMessage(`Sold ${quantity}× "${result.product.name}" — stock ${result.previousQty ?? found.quantity} → ${result.product.quantity}`);
+      if (autoSell && result.previousQty != null) {
+        setStockUpdate({
+          from: result.previousQty,
+          to: result.product.quantity,
+        });
+        setMessage(`Sold ${quantity}× "${result.product.name}" — stock ${result.previousQty} → ${result.product.quantity}`);
+      } else {
+        setMessage(`Added ${quantity}× "${result.product.name}" to cart`);
+      }
     } else {
       setMessage(result.error || 'Sale failed.');
       setScanState('not_found');
@@ -206,6 +210,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                   <div><span>Offer</span><strong className="scan-offer">₹{product.offerPrice.toLocaleString('en-IN')}</strong></div>
                 )}
                 <div><span>Sell at</span><strong>₹{getSalePrice(product).toLocaleString('en-IN')}</strong></div>
+                <div><span>Profit</span><strong className="text-profit">₹{productUnitProfit(product).toLocaleString('en-IN')}</strong></div>
               </div>
               <div className="scan-result__actions">
                 <button className="btn btn--ghost" onClick={handleRescan}>Scan Again</button>
@@ -214,14 +219,14 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                   onClick={() => handleSell(1)}
                   disabled={product.quantity === 0}
                 >
-                  <ShoppingCart size={15} /> Sell 1
+                  <ShoppingCart size={15} /> {autoSell ? 'Sell 1' : 'Add to Cart'}
                 </button>
                 <button
                   className="btn btn--outline-dark"
                   onClick={() => handleSell(sellQty)}
                   disabled={product.quantity === 0 || sellQty > product.quantity}
                 >
-                  Sell {sellQty}
+                  {autoSell ? `Sell ${sellQty}` : `Add ${sellQty}`}
                 </button>
               </div>
               {product.quantity > 1 && (

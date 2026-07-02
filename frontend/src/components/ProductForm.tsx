@@ -6,6 +6,7 @@ interface ProductFormProps {
   onSubmit: (data: ProductFormData) => { success: boolean; error?: string };
   onClose: () => void;
   editProduct?: Product | null;
+  prefill?: ProductFormData | null;
 }
 
 const CATEGORIES = Object.entries(CATEGORY_MAP);
@@ -17,7 +18,7 @@ const buildCode = (material: string, category: string, seq: string): string => {
   return `RV-${material}-${category}-${seqNum}`;
 };
 
-export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, editProduct }) => {
+export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, editProduct, prefill }) => {
   const [material, setMaterial] = useState('GP');
   const [category, setCategory] = useState('ER');
   const [seqNum, setSeqNum] = useState('0001');
@@ -49,8 +50,14 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
         imageUrl: editProduct.imageUrl,
       });
       setManualCode(true);
+    } else if (prefill) {
+      setForm({
+        ...prefill,
+        supplier: prefill.supplier || 'Unknown',
+      });
+      setManualCode(true);
     }
-  }, [editProduct]);
+  }, [editProduct, prefill]);
 
   useEffect(() => {
     if (!manualCode) {
@@ -108,12 +115,19 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
-          <h2 className="modal__title">{editProduct ? 'Edit Product' : 'Add New Product'}</h2>
+          <h2 className="modal__title">
+            {editProduct ? 'Edit Product' : prefill ? 'Add Misc Item to Inventory' : 'Add New Product'}
+          </h2>
           <button className="btn-icon" onClick={onClose}><X size={18} /></button>
         </div>
 
         <form onSubmit={handleSubmit} className="product-form">
-          {!editProduct && (
+          {prefill && (
+            <p className="form-hint" style={{ margin: '0 0 12px' }}>
+              Sold from cart — assign a product code and set remaining stock (use 0 if all sold today).
+            </p>
+          )}
+          {!editProduct && !prefill && (
             <div className="form-section">
               <p className="form-section__label">Code Builder</p>
               <div className="form-row form-row--3">
@@ -158,10 +172,10 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
                     supplier: parseSupplierFromCode(code) || f.supplier,
                   }));
                 }}
-                placeholder="RV-GP-ER-0001"
+                placeholder="e.g. GP-ER-001 or RV-GP-ER-0001"
                 className="code-input"
-                readOnly={!!editProduct}
               />
+              <p className="form-hint form-hint--inline">Enter any product code — used for barcodes, search, and sales.</p>
             </div>
             <div className="form-group">
               <label>Product Name *</label>
@@ -187,7 +201,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
             <div className="form-group">
               <label>Category</label>
               <select name="category" value={form.category} onChange={handleChange}>
-                {Object.values(CATEGORY_MAP).map((v) => <option key={v} value={v}>{v}</option>)}
+                {[...Object.values(CATEGORY_MAP), 'Misc'].map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
           </div>
@@ -250,7 +264,7 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
           <div className="form-actions">
             <button type="button" className="btn btn--ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className="btn btn--primary">
-              {editProduct ? 'Save Changes' : 'Add Product'}
+              {editProduct ? 'Save Changes' : prefill ? 'Save to Inventory' : 'Add Product'}
             </button>
           </div>
         </form>

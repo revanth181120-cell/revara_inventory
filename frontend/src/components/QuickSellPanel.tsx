@@ -15,20 +15,26 @@ interface QuickSellPanelProps {
   lastResult: LastScanResult | null;
   onOpenCamera: () => void;
   onClose: () => void;
+  stallMode?: boolean;
 }
 
 export const QuickSellPanel: React.FC<QuickSellPanelProps> = ({
   lastResult,
   onOpenCamera,
   onClose,
+  stallMode,
 }) => {
   return (
     <div className="quick-sell-bar">
       <div className="quick-sell-bar__main">
         <ScanLine size={18} className="quick-sell-bar__icon" />
         <div className="quick-sell-bar__text">
-          <strong>Quick Sell active</strong>
-          <span>Scan a barcode with your scanner — sale completes automatically</span>
+          <strong>{stallMode ? 'Stall Mode active' : 'Quick Sell active'}</strong>
+          <span>
+            {stallMode
+              ? 'Scan or search products — they add to cart. Apply discount and complete sale when done.'
+              : 'Scan a barcode with your scanner — sale completes automatically'}
+          </span>
         </div>
       </div>
 

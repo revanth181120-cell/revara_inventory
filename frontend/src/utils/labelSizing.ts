@@ -26,7 +26,7 @@ export function getLabelSizing(dimensions: LabelDimensions, forPrint = false): L
       paddingBottomMm: forPrint ? 0.35 : 0.5,
       textInsetMm: forPrint ? 0.8 : 1.0,
       brandPx: forPrint ? 14 : 15,
-      codePx: forPrint ? 15 : 16,
+      codePx: forPrint ? 9 : 10,
       pricePx: forPrint ? 18 : 19,
       mrpPx: forPrint ? 12 : 13,
       offerPx: 0,
@@ -46,8 +46,8 @@ export function getLabelSizing(dimensions: LabelDimensions, forPrint = false): L
     brandPx: Math.round((forPrint ? 14 : 16) * scale),
     codePx: Math.round((forPrint ? 11 : 12) * scale),
     pricePx: Math.round(12 * scale),
-    mrpPx: Math.round((forPrint ? 9 : 10) * scale),
-    offerPx: Math.round((forPrint ? 10 : 11) * scale),
+    mrpPx: Math.round((forPrint ? 10 : 11) * scale),
+    offerPx: 0,
     barcodeWidth: Math.max(1.0, (forPrint ? 1.4 : 1.6) * scale),
     barcodeHeight: Math.round(Math.min(dimensions.labelHeightMm * (forPrint ? 0.50 : 0.62), (forPrint ? 16 : 20) * scale)),
     sectionGapMm: forPrint ? 4.0 : 4.0,
@@ -108,18 +108,19 @@ export function buildLabelPrintCss(dimensions: LabelDimensions, forPrint = false
     }
     .tt-label__barcode svg { max-width: 100%; height: auto; }
     .tt-label__prices {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: baseline;
+      display: flex;
+      justify-content: center;
+      align-items: center;
       width: 100%;
       font-weight: bold;
       line-height: 1.15;
     }
-    .tt-label__mrp { font-size: ${s.mrpPx}px; color: #333; margin-left: ${s.textInsetMm}mm; justify-self: start; }
-    .tt-label__offer {
-      font-size: ${s.offerPx}px; margin-right: ${s.textInsetMm}mm;
-      justify-self: end; text-align: right;
-      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    .tt-label__mrp {
+      font-size: ${s.mrpPx}px;
+      color: #333;
+      text-align: center;
+      margin: 0;
+      width: 100%;
     }
   `;
 }

@@ -1,25 +1,27 @@
 import React, { useState, useMemo } from 'react';
 import Barcode from 'react-barcode';
-import { Product, CATEGORY_OPTIONS, getSalePrice } from '../types/Product';
+import { Product, CATEGORY_OPTIONS, getSalePrice, productUnitProfit } from '../types/Product';
+import { getStockLevel } from '../utils/stockTiers';
 import { Edit2, Trash2, ShoppingCart, Printer, Search, ChevronUp, ChevronDown, Plus, ImageIcon } from 'lucide-react';
 
 interface ProductTableProps {
   products: Product[];
   onEdit: (product: Product) => void;
   onDelete: (id: string) => void;
-  onSell: (id: string) => void;
+  onAddToCart: (id: string) => void;
+  onViewDetails: (product: Product) => void;
   onPrint: (product: Product) => void;
   onRestock?: (id: string) => void;
   categoryFilter?: string;
   onCategoryFilterChange?: (category: string) => void;
-  activeFilter?: 'all' | 'low' | 'out' | null;
+  activeFilter?: 'all' | 'low' | 'medium' | 'out' | 'healthy' | null;
   onClearFilter?: () => void;
 }
 
 type SortKey = keyof Pick<Product, 'code' | 'name' | 'quantity' | 'sellingPrice'>;
 
 export const ProductTable: React.FC<ProductTableProps> = ({
-  products, onEdit, onDelete, onSell, onPrint, onRestock,
+  products, onEdit, onDelete, onAddToCart, onViewDetails, onPrint, onRestock,
   categoryFilter = 'All', onCategoryFilterChange,
   activeFilter, onClearFilter,
 }) => {
@@ -83,7 +85,12 @@ export const ProductTable: React.FC<ProductTableProps> = ({
         </span>
         {activeFilter && activeFilter !== 'all' && (
           <button className="filter-clear-btn" onClick={onClearFilter}>
-            Clear filter: {activeFilter === 'low' ? 'Low Stock' : 'Out of Stock'} ×
+            Clear filter: {{
+              low: 'Low Stock',
+              medium: 'Medium Stock',
+              out: 'Out of Stock',
+              healthy: 'Healthy Stock',
+            }[activeFilter]} ×
           </button>
         )}
       </div>
@@ -132,10 +139,23 @@ export const ProductTable: React.FC<ProductTableProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((product) => (
+              {filtered.map((product) => {
+                const stockLevel = getStockLevel(product.quantity);
+                const rowClass =
+                  stockLevel === 'out' ? 'row--oos'
+                  : stockLevel === 'low' ? 'row--low'
+                  : stockLevel === 'medium' ? 'row--medium'
+                  : '';
+                const qtyClass =
+                  stockLevel === 'out' ? 'qty-badge--oos'
+                  : stockLevel === 'low' ? 'qty-badge--low'
+                  : stockLevel === 'medium' ? 'qty-badge--medium'
+                  : 'qty-badge--ok';
+
+                return (
                 <tr
                   key={product.id}
-                  className={product.quantity === 0 ? 'row--oos' : product.quantity <= 2 ? 'row--low' : ''}
+                  className={rowClass}
                 >
                   <td className="td-image">
                     {product.imageUrl ? (
@@ -147,7 +167,9 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                     )}
                   </td>
                   <td>
-                    <span className="product-code">{product.code}</span>
+                    <button type="button" className="product-code product-code--link" onClick={() => onViewDetails(product)}>
+                      {product.code}
+                    </button>
                   </td>
                   <td>
                     <div className="product-name">{product.name}</div>
@@ -157,7 +179,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                     )}
                   </td>
                   <td className="td-num">
-                    <span className={`qty-badge ${product.quantity === 0 ? 'qty-badge--oos' : product.quantity <= 2 ? 'qty-badge--low' : 'qty-badge--ok'}`}>
+                    <span className={`qty-badge ${qtyClass}`}>
                       {product.quantity}
                     </span>
                   </td>
@@ -179,7 +201,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                       color: product.sellingPrice > product.costPrice ? '#2eb8a0' : '#e05a5a',
                       fontWeight: '600',
                     }}>
-                      ₹{((getSalePrice(product) - product.costPrice) * product.quantity).toLocaleString('en-IN')}
+                      ₹{(productUnitProfit(product) * product.quantity).toLocaleString('en-IN')}
                     </span>
                   </td>
                   <td className="td-barcode">
@@ -198,12 +220,12 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                     <div className="action-group">
                       <button
                         className="btn-action btn-action--sell"
-                        onClick={() => onSell(product.id)}
+                        onClick={() => onAddToCart(product.id)}
                         disabled={product.quantity === 0}
-                        title="Sell 1 unit"
+                        title="Add to cart"
                       >
                         <ShoppingCart size={14} />
-                        <span>Sell</span>
+                        <span>Cart</span>
                       </button>
                       {product.quantity === 0 && onRestock && (
                         <button
@@ -238,7 +260,8 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>

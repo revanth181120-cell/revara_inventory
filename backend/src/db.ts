@@ -21,12 +21,26 @@ export interface DbProduct {
 
 export interface DbSale {
   id: string;
+  transaction_id: string | null;
   product_code: string;
   product_name: string;
+  category: string;
   quantity_sold: number;
+  mrp: number;
+  offer_price: number;
+  line_discount: number;
   sale_price: number;
   cost_price: number;
   sale_datetime: string;
+}
+
+export interface DbWhatsappInvoice {
+  id: string;
+  transaction_id: string;
+  customer_phone: string;
+  bill_total: number;
+  message_text: string;
+  sent_at: string;
 }
 
 function run(db: sqlite3.Database, sql: string, params: unknown[] = []): Promise<void> {
@@ -81,6 +95,30 @@ export async function initDatabase(): Promise<sqlite3.Database> {
     // column already exists
   }
 
+  const saleMigrations = [
+    'ALTER TABLE sales ADD COLUMN transaction_id TEXT',
+    'ALTER TABLE sales ADD COLUMN category TEXT DEFAULT \'\'',
+    'ALTER TABLE sales ADD COLUMN mrp REAL DEFAULT 0',
+    'ALTER TABLE sales ADD COLUMN offer_price REAL DEFAULT 0',
+    'ALTER TABLE sales ADD COLUMN line_discount REAL DEFAULT 0',
+  ];
+  for (const sql of saleMigrations) {
+    try {
+      await run(db, sql);
+    } catch {
+      // column already exists
+    }
+  }
+
+  await run(db, `CREATE TABLE IF NOT EXISTS whatsapp_invoices (
+    id TEXT PRIMARY KEY,
+    transaction_id TEXT NOT NULL,
+    customer_phone TEXT NOT NULL,
+    bill_total REAL DEFAULT 0,
+    message_text TEXT NOT NULL,
+    sent_at TEXT NOT NULL
+  )`);
+
   const suppliers = [
     ['GP', 'Gold Prince'],
     ['SP', 'Silver Palace'],
@@ -115,12 +153,18 @@ export function toApiProduct(row: DbProduct) {
 }
 
 export function toApiSale(row: DbSale) {
+  const salePrice = row.sale_price ?? 0;
   return {
     id: row.id,
+    transactionId: row.transaction_id || undefined,
     productCode: row.product_code,
     productName: row.product_name,
+    category: row.category || '',
     quantitySold: row.quantity_sold,
-    salePrice: row.sale_price,
+    mrp: row.mrp ?? salePrice,
+    offerPrice: row.offer_price ?? 0,
+    lineDiscount: row.line_discount ?? 0,
+    salePrice,
     costPrice: row.cost_price,
     saleDateTime: row.sale_datetime,
   };
@@ -160,9 +204,10 @@ export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof t
   try {
     await run(db, 'DELETE FROM sales');
     for (const s of sales) {
-      await run(db, `INSERT INTO sales (id, product_code, product_name, quantity_sold, sale_price, cost_price, sale_datetime)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`, [
-        s.id, s.productCode, s.productName, s.quantitySold,
+      await run(db, `INSERT INTO sales (id, transaction_id, product_code, product_name, category, quantity_sold, mrp, offer_price, line_discount, sale_price, cost_price, sale_datetime)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        s.id, s.transactionId || null, s.productCode, s.productName, s.category || '',
+        s.quantitySold, s.mrp ?? s.salePrice, s.offerPrice ?? 0, s.lineDiscount ?? 0,
         s.salePrice, s.costPrice, s.saleDateTime,
       ]);
     }
@@ -175,4 +220,42 @@ export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof t
 
 export async function getSuppliers(db: sqlite3.Database) {
   return all<{ code: string; name: string }>(db, 'SELECT code, name FROM suppliers ORDER BY name');
+}
+
+export function toApiWhatsappInvoice(row: DbWhatsappInvoice) {
+  return {
+    id: row.id,
+    transactionId: row.transaction_id,
+    customerPhone: row.customer_phone,
+    billTotal: row.bill_total,
+    messageText: row.message_text,
+    sentAt: row.sent_at,
+  };
+}
+
+export async function getAllWhatsappInvoices(db: sqlite3.Database) {
+  const rows = await all<DbWhatsappInvoice>(
+    db,
+    'SELECT * FROM whatsapp_invoices ORDER BY sent_at DESC',
+  );
+  return rows.map(toApiWhatsappInvoice);
+}
+
+export async function insertWhatsappInvoice(
+  db: sqlite3.Database,
+  record: ReturnType<typeof toApiWhatsappInvoice>,
+) {
+  await run(
+    db,
+    `INSERT INTO whatsapp_invoices (id, transaction_id, customer_phone, bill_total, message_text, sent_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      record.id,
+      record.transactionId,
+      record.customerPhone,
+      record.billTotal,
+      record.messageText,
+      record.sentAt,
+    ],
+  );
 }
