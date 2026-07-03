@@ -1,4 +1,4 @@
-import { ProductFormData, parseSupplierFromCode, CATEGORY_MAP } from '../types/Product';
+import { ProductImportData, parseSupplierFromCode, CATEGORY_MAP } from '../types/Product';
 
 /** Priority order — first match wins. Offer Price is intentionally excluded from selling. */
 const SELLING_PRICE_COLUMNS = [
@@ -49,13 +49,13 @@ function parseCategory(raw: string, code: string): string {
 
 export interface ImportRowResult {
   row: number;
-  data?: ProductFormData;
+  data?: ProductImportData;
   error?: string;
   warning?: string;
 }
 
 export interface ImportSummary {
-  valid: ProductFormData[];
+  valid: ProductImportData[];
   errors: ImportRowResult[];
   warnings: string[];
   skipped: number;
@@ -78,14 +78,26 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
   const hasRateCol = COST_PRICE_COLUMNS.some((c) =>
     detectedColumns.some((k) => k.toLowerCase().trim() === c.toLowerCase().trim())
   );
+  const hasQtyCol = QTY_COLUMNS.some((c) =>
+    detectedColumns.some((k) => k.toLowerCase().trim() === c.toLowerCase().trim())
+  );
 
+  if (!hasQtyCol) {
+    warnings.push('No "Qty" / "Stock" column detected — matching products will keep existing stock quantities; new products use 0.');
+  }
   if (!hasSellingCol && hasOfferCol) {
     warnings.push(
       'Sheet has "Offer Price" but no "Selling Price" / "MRP" column. Offer prices will NOT be used — add a Selling Price column or rename it.'
     );
   }
+  if (!hasSellingCol) {
+    warnings.push('No "Selling Price" / "MRP" column detected — matching products will keep existing MRP values; new products use ₹0.');
+  }
+  if (!hasOfferCol) {
+    warnings.push('No "Offer Price" column detected — matching products will keep existing offer prices; new products use no offer.');
+  }
   if (!hasRateCol && !detectedColumns.some((k) => /cost/i.test(k))) {
-    warnings.push('No "Rate" or "Cost Price" column detected — wholesale costs may import as ₹0.');
+    warnings.push('No "Rate" or "Cost Price" column detected — matching products will keep existing wholesale costs; new products use ₹0.');
   }
 
   rows.forEach((row, index) => {
@@ -110,10 +122,14 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
       return;
     }
 
-    const quantity = parseNumber(findColumn(row, QTY_COLUMNS));
-    const sellingPrice = parseNumber(findColumn(row, SELLING_PRICE_COLUMNS));
-    const costPrice = parseNumber(findColumn(row, COST_PRICE_COLUMNS));
-    const offerPrice = parseNumber(findColumn(row, OFFER_PRICE_COLUMNS));
+    const quantityRaw = findColumn(row, QTY_COLUMNS);
+    const sellingPriceRaw = findColumn(row, SELLING_PRICE_COLUMNS);
+    const costPriceRaw = findColumn(row, COST_PRICE_COLUMNS);
+    const offerPriceRaw = findColumn(row, OFFER_PRICE_COLUMNS);
+    const quantity = parseNumber(quantityRaw);
+    const sellingPrice = parseNumber(sellingPriceRaw);
+    const costPrice = parseNumber(costPriceRaw);
+    const offerPrice = parseNumber(offerPriceRaw);
 
     if (isNaN(quantity) || quantity < 0) {
       errors.push({ row: rowNum, error: `"${code}": invalid quantity` });
@@ -166,6 +182,12 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
       sellingPrice,
       offerPrice: offerPrice > 0 ? offerPrice : 0,
       costPrice,
+      importFields: {
+        quantity: quantityRaw !== undefined,
+        sellingPrice: sellingPriceRaw !== undefined,
+        offerPrice: offerPriceRaw !== undefined,
+        costPrice: costPriceRaw !== undefined,
+      },
     });
   });
 

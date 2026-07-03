@@ -70,6 +70,11 @@ export interface CompletedTransaction {
 }
 
 export type ProductFormData = Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'labelPrinted'>;
+export type ProductImportNumericField = 'quantity' | 'sellingPrice' | 'offerPrice' | 'costPrice';
+export type ProductImportData = ProductFormData & {
+  /** Numeric columns present in the source import row. Missing fields should not overwrite existing products. */
+  importFields?: Partial<Record<ProductImportNumericField, boolean>>;
+};
 
 export const CATEGORY_MAP: Record<string, string> = {
   ER: 'Ear Set',

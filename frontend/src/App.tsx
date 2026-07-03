@@ -14,7 +14,7 @@ import { ProductDetails } from './components/ProductDetails';
 import { BarcodePrint } from './pages/BarcodePrint';
 import BarcodePrintPage from './pages/BarcodePrintPage';
 import { PendingStockPanel, pendingToProductForm } from './components/PendingStockPanel';
-import { Product, ProductFormData, CompletedTransaction, PendingStockItem } from './types/Product';
+import { Product, ProductFormData, ProductImportData, CompletedTransaction, PendingStockItem } from './types/Product';
 import ImportExcel from './components/ImportExcel';
 import { ExportInventory } from './components/ExportInventory';
 import { Plus, ScanLine, TrendingUp, Gem, Tag, ShoppingCart, PackagePlus } from 'lucide-react';
@@ -180,7 +180,7 @@ function App() {
     return result;
   };
 
-  const handleImportProducts = (importedProducts: ProductFormData[]) => {
+  const handleImportProducts = (importedProducts: ProductImportData[]) => {
     const { successCount, errorCount, updatedCount } = addProductsBatch(importedProducts);
     if (successCount > 0) {
       const newCount = successCount - updatedCount;

@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { ProductFormData } from '../types/Product';
+import { ProductImportData } from '../types/Product';
 import { Upload, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { parseExcelRows, ImportSummary } from '../utils/importExcel';
 
 type Props = {
-  onImport: (products: ProductFormData[]) => void;
+  onImport: (products: ProductImportData[]) => void;
 };
 
 function ImportExcel({ onImport }: Props) {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Product, SaleRecord, ProductFormData, CartItem, CompletedTransaction, PendingStockItem, parseSupplierFromCode, getSalePrice, normalizeSaleRecord, saleLineProfit, productUnitProfit } from '../types/Product';
+import { Product, SaleRecord, ProductFormData, ProductImportData, ProductImportNumericField, CartItem, CompletedTransaction, PendingStockItem, parseSupplierFromCode, getSalePrice, normalizeSaleRecord, saleLineProfit, productUnitProfit } from '../types/Product';
 import { checkApiHealth, fetchProducts, fetchSales, syncProducts, syncSales } from '../api/inventoryApi';
 import { isOutOfStock, isLowStock, isMediumStock, isHealthyStock } from '../utils/stockTiers';
 
@@ -9,6 +9,13 @@ const SALES_KEY = 'revara_sales';
 const PENDING_STOCK_KEY = 'revara_pending_stock';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+function shouldApplyImportedNumericField(
+  fields: ProductImportData['importFields'],
+  field: ProductImportNumericField
+): boolean {
+  return !fields || fields[field] === true;
+}
 
 function normalizeProduct(raw: Partial<Product> & { code: string; name: string }): Product {
   const now = new Date().toISOString();
@@ -177,7 +184,7 @@ export function useInventory() {
     return added ? { success: true } : { success: false, error };
   }, []);
 
-  const addProductsBatch = useCallback((items: ProductFormData[]): { successCount: number; errorCount: number; updatedCount: number } => {
+  const addProductsBatch = useCallback((items: ProductImportData[]): { successCount: number; errorCount: number; updatedCount: number } => {
     let successCount = 0;
     let errorCount = 0;
     let updatedCount = 0;
@@ -186,7 +193,8 @@ export function useInventory() {
       const next = [...prev];
       const indexByCode = new Map(next.map((p, i) => [p.code.toLowerCase(), i]));
 
-      for (const data of items) {
+      for (const item of items) {
+        const { importFields, ...data } = item;
         if (!data.code?.trim()) {
           errorCount++;
           continue;
@@ -202,6 +210,10 @@ export function useInventory() {
             ...data,
             code: data.code.trim(),
             supplier: data.supplier || parseSupplierFromCode(data.code) || existing.supplier,
+            quantity: shouldApplyImportedNumericField(importFields, 'quantity') ? data.quantity : existing.quantity,
+            sellingPrice: shouldApplyImportedNumericField(importFields, 'sellingPrice') ? data.sellingPrice : existing.sellingPrice,
+            offerPrice: shouldApplyImportedNumericField(importFields, 'offerPrice') ? data.offerPrice : existing.offerPrice,
+            costPrice: shouldApplyImportedNumericField(importFields, 'costPrice') ? data.costPrice : existing.costPrice,
             updatedAt: now,
           };
           updatedCount++;
