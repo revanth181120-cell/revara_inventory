@@ -394,6 +394,18 @@ export function useInventory() {
       return { success: false, error: 'Sale not found.' };
     }
 
+    const missingProductSale = toRevert.find(
+      (sale) =>
+        !sale.isCustom &&
+        !products.some((p) => p.code.toLowerCase() === sale.productCode.toLowerCase())
+    );
+    if (missingProductSale) {
+      return {
+        success: false,
+        error: `Cannot revert ${missingProductSale.productCode}: product is no longer in inventory, so stock cannot be restored.`,
+      };
+    }
+
     const now = new Date().toISOString();
     const revertedIds = new Set(toRevert.map((s) => s.id));
     const revertedPendingIds = new Set(
@@ -421,7 +433,7 @@ export function useInventory() {
     });
 
     return { success: true, revertedCount: toRevert.length };
-  }, [sales]);
+  }, [products, sales]);
 
   const revertSale = useCallback(
     (saleId: string) => revertSales([saleId]),
