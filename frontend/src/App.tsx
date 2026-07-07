@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useInventory } from './hooks/useInventory';
 import { useCart } from './hooks/useCart';
 import { useHardwareScanner, normalizeScannedCode } from './hooks/useHardwareScanner';
@@ -49,7 +49,6 @@ function App() {
   const [pendingTarget, setPendingTarget] = useState<PendingStockItem | null>(null);
   const [productPrefill, setProductPrefill] = useState<ProductFormData | null>(null);
   const [lastScanResult, setLastScanResult] = useState<LastScanResult | null>(null);
-  const lastScanRef = useRef<{ code: string; at: number } | null>(null);
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -82,8 +81,6 @@ function App() {
     if (!code) return;
 
     const now = Date.now();
-    if (lastScanRef.current?.code === code && now - lastScanRef.current.at < 1500) return;
-    lastScanRef.current = { code, at: now };
 
     const product = getProductByCode(code);
     if (!product) {
