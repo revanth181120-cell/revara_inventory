@@ -55,8 +55,13 @@ function all<T>(db: sqlite3.Database, sql: string, params: unknown[] = []): Prom
   });
 }
 
-export async function initDatabase(): Promise<sqlite3.Database> {
-  const db = new sqlite3.Database(DB_PATH);
+async function tableColumns(db: sqlite3.Database, tableName: string): Promise<Set<string>> {
+  const rows = await all<{ name: string }>(db, `PRAGMA table_info(${tableName})`);
+  return new Set(rows.map((row) => row.name));
+}
+
+export async function initDatabase(dbPath: string = DB_PATH): Promise<sqlite3.Database> {
+  const db = new sqlite3.Database(dbPath);
 
   await run(db, `CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
@@ -95,6 +100,7 @@ export async function initDatabase(): Promise<sqlite3.Database> {
     // column already exists
   }
 
+  const existingSaleColumns = await tableColumns(db, 'sales');
   const saleMigrations = [
     'ALTER TABLE sales ADD COLUMN transaction_id TEXT',
     'ALTER TABLE sales ADD COLUMN category TEXT DEFAULT \'\'',
@@ -109,6 +115,12 @@ export async function initDatabase(): Promise<sqlite3.Database> {
       // column already exists
     }
   }
+  await run(
+    db,
+    existingSaleColumns.has('mrp')
+      ? 'UPDATE sales SET mrp = sale_price WHERE (mrp IS NULL OR mrp <= 0) AND sale_price > 0'
+      : 'UPDATE sales SET mrp = sale_price WHERE sale_price > 0',
+  );
 
   await run(db, `CREATE TABLE IF NOT EXISTS whatsapp_invoices (
     id TEXT PRIMARY KEY,
@@ -154,6 +166,7 @@ export function toApiProduct(row: DbProduct) {
 
 export function toApiSale(row: DbSale) {
   const salePrice = row.sale_price ?? 0;
+  const mrp = row.mrp && row.mrp > 0 ? row.mrp : salePrice;
   return {
     id: row.id,
     transactionId: row.transaction_id || undefined,
@@ -161,7 +174,7 @@ export function toApiSale(row: DbSale) {
     productName: row.product_name,
     category: row.category || '',
     quantitySold: row.quantity_sold,
-    mrp: row.mrp ?? salePrice,
+    mrp,
     offerPrice: row.offer_price ?? 0,
     lineDiscount: row.line_discount ?? 0,
     salePrice,
