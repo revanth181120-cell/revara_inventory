@@ -32,6 +32,8 @@ export interface DbSale {
   sale_price: number;
   cost_price: number;
   sale_datetime: string;
+  is_custom: number;
+  pending_stock_id: string | null;
 }
 
 export interface DbWhatsappInvoice {
@@ -101,6 +103,8 @@ export async function initDatabase(): Promise<sqlite3.Database> {
     'ALTER TABLE sales ADD COLUMN mrp REAL DEFAULT 0',
     'ALTER TABLE sales ADD COLUMN offer_price REAL DEFAULT 0',
     'ALTER TABLE sales ADD COLUMN line_discount REAL DEFAULT 0',
+    'ALTER TABLE sales ADD COLUMN is_custom INTEGER DEFAULT 0',
+    'ALTER TABLE sales ADD COLUMN pending_stock_id TEXT',
   ];
   for (const sql of saleMigrations) {
     try {
@@ -167,6 +171,8 @@ export function toApiSale(row: DbSale) {
     salePrice,
     costPrice: row.cost_price,
     saleDateTime: row.sale_datetime,
+    isCustom: row.is_custom === 1,
+    pendingStockId: row.pending_stock_id || undefined,
   };
 }
 
@@ -204,11 +210,11 @@ export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof t
   try {
     await run(db, 'DELETE FROM sales');
     for (const s of sales) {
-      await run(db, `INSERT INTO sales (id, transaction_id, product_code, product_name, category, quantity_sold, mrp, offer_price, line_discount, sale_price, cost_price, sale_datetime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      await run(db, `INSERT INTO sales (id, transaction_id, product_code, product_name, category, quantity_sold, mrp, offer_price, line_discount, sale_price, cost_price, sale_datetime, is_custom, pending_stock_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         s.id, s.transactionId || null, s.productCode, s.productName, s.category || '',
         s.quantitySold, s.mrp ?? s.salePrice, s.offerPrice ?? 0, s.lineDiscount ?? 0,
-        s.salePrice, s.costPrice, s.saleDateTime,
+        s.salePrice, s.costPrice, s.saleDateTime, s.isCustom ? 1 : 0, s.pendingStockId || null,
       ]);
     }
     await run(db, 'COMMIT');
