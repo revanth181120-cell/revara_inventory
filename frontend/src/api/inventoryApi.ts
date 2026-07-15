@@ -18,12 +18,19 @@ export interface ApiProduct {
 
 export interface ApiSale {
   id: string;
+  transactionId?: string;
   productCode: string;
   productName: string;
+  category: string;
   quantitySold: number;
+  mrp: number;
+  offerPrice: number;
+  lineDiscount: number;
   salePrice: number;
   costPrice: number;
   saleDateTime: string;
+  isCustom?: boolean;
+  pendingStockId?: string;
 }
 
 export async function checkApiHealth(): Promise<boolean> {
