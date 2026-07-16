@@ -55,6 +55,50 @@ function all<T>(db: sqlite3.Database, sql: string, params: unknown[] = []): Prom
   });
 }
 
+const databaseQueues = new WeakMap<sqlite3.Database, Promise<void>>();
+
+async function withDatabaseQueue<T>(
+  db: sqlite3.Database,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = databaseQueues.get(db) ?? Promise.resolve();
+
+  const current = previous
+    .catch(() => undefined)
+    .then(operation);
+
+  databaseQueues.set(
+    db,
+    current.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+
+  return current;
+}
+
+async function withExclusiveTransaction<T>(
+  db: sqlite3.Database,
+  operation: () => Promise<T>,
+): Promise<T> {
+  return withDatabaseQueue(db, async () => {
+    await run(db, 'BEGIN TRANSACTION');
+    try {
+      const result = await operation();
+      await run(db, 'COMMIT');
+      return result;
+    } catch (err) {
+      try {
+        await run(db, 'ROLLBACK');
+      } catch {
+        // Keep the original transaction error; rollback can fail if SQLite already closed it.
+      }
+      throw err;
+    }
+  });
+}
+
 export async function initDatabase(): Promise<sqlite3.Database> {
   const db = new sqlite3.Database(DB_PATH);
 
@@ -171,18 +215,21 @@ export function toApiSale(row: DbSale) {
 }
 
 export async function getAllProducts(db: sqlite3.Database) {
-  const rows = await all<DbProduct>(db, 'SELECT * FROM products ORDER BY code');
-  return rows.map(toApiProduct);
+  return withDatabaseQueue(db, async () => {
+    const rows = await all<DbProduct>(db, 'SELECT * FROM products ORDER BY code');
+    return rows.map(toApiProduct);
+  });
 }
 
 export async function getAllSales(db: sqlite3.Database) {
-  const rows = await all<DbSale>(db, 'SELECT * FROM sales ORDER BY sale_datetime DESC');
-  return rows.map(toApiSale);
+  return withDatabaseQueue(db, async () => {
+    const rows = await all<DbSale>(db, 'SELECT * FROM sales ORDER BY sale_datetime DESC');
+    return rows.map(toApiSale);
+  });
 }
 
 export async function syncProducts(db: sqlite3.Database, products: ReturnType<typeof toApiProduct>[]) {
-  await run(db, 'BEGIN TRANSACTION');
-  try {
+  await withExclusiveTransaction(db, async () => {
     await run(db, 'DELETE FROM products');
     for (const p of products) {
       await run(db, `INSERT INTO products (id, code, name, category, supplier, quantity, selling_price, offer_price, cost_price, image_url, label_printed, created_at, updated_at)
@@ -192,16 +239,11 @@ export async function syncProducts(db: sqlite3.Database, products: ReturnType<ty
         p.createdAt, p.updatedAt,
       ]);
     }
-    await run(db, 'COMMIT');
-  } catch (e) {
-    await run(db, 'ROLLBACK');
-    throw e;
-  }
+  });
 }
 
 export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof toApiSale>[]) {
-  await run(db, 'BEGIN TRANSACTION');
-  try {
+  await withExclusiveTransaction(db, async () => {
     await run(db, 'DELETE FROM sales');
     for (const s of sales) {
       await run(db, `INSERT INTO sales (id, transaction_id, product_code, product_name, category, quantity_sold, mrp, offer_price, line_discount, sale_price, cost_price, sale_datetime)
@@ -211,15 +253,13 @@ export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof t
         s.salePrice, s.costPrice, s.saleDateTime,
       ]);
     }
-    await run(db, 'COMMIT');
-  } catch (e) {
-    await run(db, 'ROLLBACK');
-    throw e;
-  }
+  });
 }
 
 export async function getSuppliers(db: sqlite3.Database) {
-  return all<{ code: string; name: string }>(db, 'SELECT code, name FROM suppliers ORDER BY name');
+  return withDatabaseQueue(db, () =>
+    all<{ code: string; name: string }>(db, 'SELECT code, name FROM suppliers ORDER BY name'),
+  );
 }
 
 export function toApiWhatsappInvoice(row: DbWhatsappInvoice) {
@@ -234,28 +274,32 @@ export function toApiWhatsappInvoice(row: DbWhatsappInvoice) {
 }
 
 export async function getAllWhatsappInvoices(db: sqlite3.Database) {
-  const rows = await all<DbWhatsappInvoice>(
-    db,
-    'SELECT * FROM whatsapp_invoices ORDER BY sent_at DESC',
-  );
-  return rows.map(toApiWhatsappInvoice);
+  return withDatabaseQueue(db, async () => {
+    const rows = await all<DbWhatsappInvoice>(
+      db,
+      'SELECT * FROM whatsapp_invoices ORDER BY sent_at DESC',
+    );
+    return rows.map(toApiWhatsappInvoice);
+  });
 }
 
 export async function insertWhatsappInvoice(
   db: sqlite3.Database,
   record: ReturnType<typeof toApiWhatsappInvoice>,
 ) {
-  await run(
-    db,
-    `INSERT INTO whatsapp_invoices (id, transaction_id, customer_phone, bill_total, message_text, sent_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      record.id,
-      record.transactionId,
-      record.customerPhone,
-      record.billTotal,
-      record.messageText,
-      record.sentAt,
-    ],
+  await withDatabaseQueue(db, () =>
+    run(
+      db,
+      `INSERT INTO whatsapp_invoices (id, transaction_id, customer_phone, bill_total, message_text, sent_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        record.id,
+        record.transactionId,
+        record.customerPhone,
+        record.billTotal,
+        record.messageText,
+        record.sentAt,
+      ],
+    ),
   );
 }
