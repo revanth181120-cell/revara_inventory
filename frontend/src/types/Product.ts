@@ -17,6 +17,7 @@ export interface Product {
 export interface SaleRecord {
   id: string;
   transactionId?: string;
+  productId?: string;
   productCode: string;
   productName: string;
   category: string;
@@ -161,6 +162,7 @@ export function normalizeSaleRecord(raw: Partial<SaleRecord> & { productCode: st
   return {
     id: raw.id || `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     transactionId: raw.transactionId,
+    productId: raw.productId,
     productCode: raw.productCode,
     productName: raw.productName || '',
     category: raw.category || '',
