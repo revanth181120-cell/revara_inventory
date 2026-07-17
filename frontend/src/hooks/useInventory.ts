@@ -57,6 +57,25 @@ function isSameWeek(iso: string, date: Date): boolean {
   return d >= start && d < end;
 }
 
+function isLegacySaleMatch(product: Product, sale: SaleRecord): boolean {
+  if (product.code.toLowerCase() !== sale.productCode.toLowerCase()) return false;
+
+  const createdAt = Date.parse(product.createdAt);
+  const soldAt = Date.parse(sale.saleDateTime);
+  if (Number.isNaN(createdAt) || Number.isNaN(soldAt)) return true;
+
+  return createdAt <= soldAt;
+}
+
+function findSaleProduct(products: Product[], sale: SaleRecord): Product | undefined {
+  if (sale.productId) {
+    return products.find((p) => p.id === sale.productId);
+  }
+
+  const candidates = products.filter((p) => isLegacySaleMatch(p, sale));
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
 export function useInventory() {
   const [apiConnected, setApiConnected] = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -272,6 +291,7 @@ export function useInventory() {
     const saleRecord = normalizeSaleRecord({
       id: generateId(),
       transactionId,
+      productId: product.id,
       productCode: product.code,
       productName: product.name,
       category: product.category || 'Uncategorized',
@@ -335,6 +355,7 @@ export function useInventory() {
       return normalizeSaleRecord({
         id: saleId,
         transactionId,
+        productId: item.isCustom ? undefined : item.productId,
         productCode: item.isCustom ? `MISC-${saleId.slice(-6)}` : item.productCode,
         productName: item.productName,
         category: item.category,
@@ -399,6 +420,19 @@ export function useInventory() {
     const revertedPendingIds = new Set(
       toRevert.filter((s) => s.pendingStockId).map((s) => s.pendingStockId as string)
     );
+    const restoreTargets: Array<{ sale: SaleRecord; productId: string }> = [];
+
+    for (const sale of toRevert) {
+      if (sale.isCustom) continue;
+      const product = findSaleProduct(products, sale);
+      if (!product) {
+        return {
+          success: false,
+          error: `Cannot revert ${sale.productCode}: original product could not be confirmed.`,
+        };
+      }
+      restoreTargets.push({ sale, productId: product.id });
+    }
 
     setSales((prev) => prev.filter((s) => !idSet.has(s.id)));
     setPendingStock((prev) =>
@@ -406,9 +440,8 @@ export function useInventory() {
     );
     setProducts((prev) => {
       const next = prev.map((p) => ({ ...p }));
-      for (const sale of toRevert) {
-        if (sale.isCustom) continue;
-        const idx = next.findIndex((p) => p.code.toLowerCase() === sale.productCode.toLowerCase());
+      for (const { sale, productId } of restoreTargets) {
+        const idx = next.findIndex((p) => p.id === productId);
         if (idx !== -1) {
           next[idx] = {
             ...next[idx],
@@ -421,7 +454,7 @@ export function useInventory() {
     });
 
     return { success: true, revertedCount: toRevert.length };
-  }, [sales]);
+  }, [products, sales]);
 
   const revertSale = useCallback(
     (saleId: string) => revertSales([saleId]),
@@ -581,7 +614,7 @@ export function useInventory() {
   }, {});
 
   const topSellingCategories = sales.reduce<Record<string, number>>((acc, s) => {
-    const key = s.category || products.find((p) => p.code === s.productCode)?.category || 'Uncategorized';
+    const key = s.category || findSaleProduct(products, s)?.category || 'Uncategorized';
     acc[key] = (acc[key] || 0) + s.quantitySold;
     return acc;
   }, {});

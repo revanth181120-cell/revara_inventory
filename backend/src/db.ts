@@ -22,6 +22,7 @@ export interface DbProduct {
 export interface DbSale {
   id: string;
   transaction_id: string | null;
+  product_id: string | null;
   product_code: string;
   product_name: string;
   category: string;
@@ -97,6 +98,7 @@ export async function initDatabase(): Promise<sqlite3.Database> {
 
   const saleMigrations = [
     'ALTER TABLE sales ADD COLUMN transaction_id TEXT',
+    'ALTER TABLE sales ADD COLUMN product_id TEXT',
     'ALTER TABLE sales ADD COLUMN category TEXT DEFAULT \'\'',
     'ALTER TABLE sales ADD COLUMN mrp REAL DEFAULT 0',
     'ALTER TABLE sales ADD COLUMN offer_price REAL DEFAULT 0',
@@ -157,6 +159,7 @@ export function toApiSale(row: DbSale) {
   return {
     id: row.id,
     transactionId: row.transaction_id || undefined,
+    productId: row.product_id || undefined,
     productCode: row.product_code,
     productName: row.product_name,
     category: row.category || '',
@@ -204,9 +207,9 @@ export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof t
   try {
     await run(db, 'DELETE FROM sales');
     for (const s of sales) {
-      await run(db, `INSERT INTO sales (id, transaction_id, product_code, product_name, category, quantity_sold, mrp, offer_price, line_discount, sale_price, cost_price, sale_datetime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-        s.id, s.transactionId || null, s.productCode, s.productName, s.category || '',
+      await run(db, `INSERT INTO sales (id, transaction_id, product_id, product_code, product_name, category, quantity_sold, mrp, offer_price, line_discount, sale_price, cost_price, sale_datetime)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+        s.id, s.transactionId || null, s.productId || null, s.productCode, s.productName, s.category || '',
         s.quantitySold, s.mrp ?? s.salePrice, s.offerPrice ?? 0, s.lineDiscount ?? 0,
         s.salePrice, s.costPrice, s.saleDateTime,
       ]);

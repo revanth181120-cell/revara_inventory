@@ -10,6 +10,17 @@ interface ProductDetailsProps {
   onAddToCart: (product: Product) => void;
 }
 
+function isSaleForProduct(sale: SaleRecord, product: Product): boolean {
+  if (sale.productId) return sale.productId === product.id;
+  if (sale.productCode.toLowerCase() !== product.code.toLowerCase()) return false;
+
+  const createdAt = Date.parse(product.createdAt);
+  const soldAt = Date.parse(sale.saleDateTime);
+  if (Number.isNaN(createdAt) || Number.isNaN(soldAt)) return true;
+
+  return createdAt <= soldAt;
+}
+
 export const ProductDetails: React.FC<ProductDetailsProps> = ({
   product,
   sales,
@@ -18,7 +29,7 @@ export const ProductDetails: React.FC<ProductDetailsProps> = ({
   onAddToCart,
 }) => {
   const productSales = sales
-    .filter((s) => s.productCode.toLowerCase() === product.code.toLowerCase())
+    .filter((s) => isSaleForProduct(s, product))
     .slice(0, 20);
 
   const totalSold = productSales.reduce((sum, s) => sum + s.quantitySold, 0);
