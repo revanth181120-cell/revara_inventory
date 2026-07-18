@@ -33,6 +33,46 @@ function migrateStoredProducts(stored: unknown[]): Product[] {
   return stored.map((item) => normalizeProduct(item as Partial<Product> & { code: string; name: string }));
 }
 
+type StockDeductionResult =
+  | { success: true; products: Product[] }
+  | { success: false; error: string };
+
+function deductCartStock(products: Product[], items: CartItem[], saleDateTime: string): StockDeductionResult {
+  const requiredById = new Map<string, { code: string; quantity: number }>();
+
+  for (const item of items) {
+    if (item.isCustom || !item.productId) continue;
+    const required = requiredById.get(item.productId);
+    requiredById.set(item.productId, {
+      code: item.productCode,
+      quantity: (required?.quantity ?? 0) + item.quantity,
+    });
+  }
+
+  for (const [productId, required] of requiredById) {
+    const product = products.find((p) => p.id === productId);
+    if (!product) {
+      return { success: false, error: `Product ${required.code} not found.` };
+    }
+    if (product.quantity < required.quantity) {
+      return { success: false, error: `Only ${product.quantity} of ${required.code} in stock.` };
+    }
+  }
+
+  return {
+    success: true,
+    products: products.map((product) => {
+      const required = requiredById.get(product.id);
+      if (!required) return product;
+      return {
+        ...product,
+        quantity: product.quantity - required.quantity,
+        updatedAt: saleDateTime,
+      };
+    }),
+  };
+}
+
 function isSameDay(iso: string, date: Date): boolean {
   const d = new Date(iso);
   return (
@@ -70,6 +110,8 @@ export function useInventory() {
       return [];
     }
   });
+  const productsRef = useRef(products);
+  const cartSaleInProgress = useRef(false);
 
   const [sales, setSales] = useState<SaleRecord[]>(() => {
     try {
@@ -101,6 +143,11 @@ export function useInventory() {
   useEffect(() => {
     localStorage.setItem(PENDING_STOCK_KEY, JSON.stringify(pendingStock));
   }, [pendingStock]);
+
+  useEffect(() => {
+    productsRef.current = products;
+    cartSaleInProgress.current = false;
+  }, [products, sales, pendingStock]);
 
   // Load from SQLite API on startup, fallback to localStorage
   useEffect(() => {
@@ -291,16 +338,10 @@ export function useInventory() {
       return { success: false, error: 'Cart is empty.' };
     }
 
-    for (const item of items) {
-      if (item.isCustom) continue;
-      const product = products.find((p) => p.id === item.productId);
-      if (!product) {
-        return { success: false, error: `Product ${item.productCode} not found.` };
-      }
-      if (product.quantity < item.quantity) {
-        return { success: false, error: `Only ${product.quantity} of ${item.productCode} in stock.` };
-      }
+    if (cartSaleInProgress.current) {
+      return { success: false, error: 'Sale is already being completed.' };
     }
+    cartSaleInProgress.current = true;
 
     const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
     const discount = Math.max(0, Math.min(billDiscount, subtotal));
@@ -308,6 +349,12 @@ export function useInventory() {
     const transactionId = generateId();
     const saleDateTime = new Date().toISOString();
     const newPending: PendingStockItem[] = [];
+    const stockDeduction = deductCartStock(productsRef.current, items, saleDateTime);
+
+    if (!stockDeduction.success) {
+      cartSaleInProgress.current = false;
+      return { success: false, error: stockDeduction.error };
+    }
 
     const saleRecords: SaleRecord[] = items.map((item) => {
       const lineSubtotal = item.unitPrice * item.quantity;
@@ -350,22 +397,8 @@ export function useInventory() {
       });
     });
 
-    setProducts((prev) => {
-      const next = prev.map((p) => ({ ...p }));
-      for (const item of items) {
-        if (item.isCustom || !item.productId) continue;
-        const idx = next.findIndex((p) => p.id === item.productId);
-        if (idx !== -1) {
-          next[idx] = {
-            ...next[idx],
-            quantity: next[idx].quantity - item.quantity,
-            updatedAt: saleDateTime,
-          };
-        }
-      }
-      return next;
-    });
-
+    productsRef.current = stockDeduction.products;
+    setProducts(stockDeduction.products);
     setSales((prev) => [...saleRecords, ...prev]);
     if (newPending.length > 0) {
       setPendingStock((prev) => [...newPending, ...prev]);
@@ -385,7 +418,7 @@ export function useInventory() {
         saleDateTime,
       },
     };
-  }, [products]);
+  }, []);
 
   const revertSales = useCallback((saleIds: string[]): { success: boolean; error?: string; revertedCount?: number } => {
     const idSet = new Set(saleIds);
