@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, SaleRecord, ProductFormData, CartItem, CompletedTransaction, PendingStockItem, parseSupplierFromCode, getSalePrice, normalizeSaleRecord, saleLineProfit, productUnitProfit } from '../types/Product';
-import { checkApiHealth, fetchProducts, fetchSales, syncProducts, syncSales } from '../api/inventoryApi';
+import { checkApiHealth, fetchProducts, fetchPendingStock, fetchSales, syncPendingStock, syncProducts, syncSales } from '../api/inventoryApi';
 import { isOutOfStock, isLowStock, isMediumStock, isHealthyStock } from '../utils/stockTiers';
 
 const PRODUCTS_KEY = 'revara_products';
@@ -113,7 +113,11 @@ export function useInventory() {
       }
 
       try {
-        const [apiProducts, apiSales] = await Promise.all([fetchProducts(), fetchSales()]);
+        const [apiProducts, apiSales, apiPendingStock] = await Promise.all([
+          fetchProducts(),
+          fetchSales(),
+          fetchPendingStock(),
+        ]);
         if (apiProducts.length > 0 || apiSales.length > 0) {
           setProducts(apiProducts as Product[]);
           setSales((apiSales as SaleRecord[]).map((s) => normalizeSaleRecord(s)));
@@ -132,6 +136,17 @@ export function useInventory() {
             await syncSales(normalized);
           }
         }
+
+        if (apiPendingStock.length > 0) {
+          setPendingStock(apiPendingStock as PendingStockItem[]);
+        } else {
+          const localPendingStock = localStorage.getItem(PENDING_STOCK_KEY);
+          if (localPendingStock) {
+            const parsed: PendingStockItem[] = JSON.parse(localPendingStock);
+            setPendingStock(parsed);
+            await syncPendingStock(parsed);
+          }
+        }
       } catch {
         setApiConnected(false);
       } finally {
@@ -147,9 +162,10 @@ export function useInventory() {
     syncTimer.current = setTimeout(() => {
       syncProducts(products).catch(() => setApiConnected(false));
       syncSales(sales).catch(() => setApiConnected(false));
+      syncPendingStock(pendingStock).catch(() => setApiConnected(false));
     }, 800);
     return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
-  }, [products, sales, apiConnected]);
+  }, [products, sales, pendingStock, apiConnected]);
 
   const addProduct = useCallback((data: ProductFormData): { success: boolean; error?: string } => {
     let added = false;

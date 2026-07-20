@@ -43,6 +43,18 @@ export interface DbWhatsappInvoice {
   sent_at: string;
 }
 
+export interface DbPendingStockItem {
+  id: string;
+  sale_id: string;
+  name: string;
+  category: string;
+  quantity_sold: number;
+  selling_price: number;
+  cost_price: number;
+  sale_datetime: string;
+  resolved: number;
+}
+
 function run(db: sqlite3.Database, sql: string, params: unknown[] = []): Promise<void> {
   return new Promise((resolve, reject) => {
     db.run(sql, params, (err) => (err ? reject(err) : resolve()));
@@ -117,6 +129,18 @@ export async function initDatabase(): Promise<sqlite3.Database> {
     bill_total REAL DEFAULT 0,
     message_text TEXT NOT NULL,
     sent_at TEXT NOT NULL
+  )`);
+
+  await run(db, `CREATE TABLE IF NOT EXISTS pending_stock (
+    id TEXT PRIMARY KEY,
+    sale_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT DEFAULT '',
+    quantity_sold INTEGER DEFAULT 1,
+    selling_price REAL DEFAULT 0,
+    cost_price REAL DEFAULT 0,
+    sale_datetime TEXT NOT NULL,
+    resolved INTEGER DEFAULT 0
   )`);
 
   const suppliers = [
@@ -258,4 +282,58 @@ export async function insertWhatsappInvoice(
       record.sentAt,
     ],
   );
+}
+
+export function toApiPendingStockItem(row: DbPendingStockItem) {
+  return {
+    id: row.id,
+    saleId: row.sale_id,
+    name: row.name,
+    category: row.category || '',
+    quantitySold: row.quantity_sold ?? 1,
+    sellingPrice: row.selling_price ?? 0,
+    costPrice: row.cost_price ?? 0,
+    saleDateTime: row.sale_datetime,
+    resolved: row.resolved === 1,
+  };
+}
+
+export async function getAllPendingStock(db: sqlite3.Database) {
+  const rows = await all<DbPendingStockItem>(
+    db,
+    'SELECT * FROM pending_stock ORDER BY sale_datetime DESC',
+  );
+  return rows.map(toApiPendingStockItem);
+}
+
+export async function syncPendingStock(
+  db: sqlite3.Database,
+  pendingStock: ReturnType<typeof toApiPendingStockItem>[],
+) {
+  await run(db, 'BEGIN TRANSACTION');
+  try {
+    await run(db, 'DELETE FROM pending_stock');
+    for (const item of pendingStock) {
+      await run(
+        db,
+        `INSERT INTO pending_stock (id, sale_id, name, category, quantity_sold, selling_price, cost_price, sale_datetime, resolved)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          item.id,
+          item.saleId,
+          item.name,
+          item.category || '',
+          item.quantitySold ?? 1,
+          item.sellingPrice ?? 0,
+          item.costPrice ?? 0,
+          item.saleDateTime,
+          item.resolved ? 1 : 0,
+        ],
+      );
+    }
+    await run(db, 'COMMIT');
+  } catch (e) {
+    await run(db, 'ROLLBACK');
+    throw e;
+  }
 }
