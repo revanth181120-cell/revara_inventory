@@ -9,6 +9,8 @@ import {
   getSuppliers,
   getAllWhatsappInvoices,
   insertWhatsappInvoice,
+  getAllPendingStock,
+  syncPendingStock,
 } from './db';
 
 const PORT = process.env.PORT || 3001;
@@ -46,6 +48,28 @@ async function main() {
     try {
       const suppliers = await getSuppliers(db);
       res.json(suppliers);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/pending-stock', async (_req, res) => {
+    try {
+      const pendingStock = await getAllPendingStock(db);
+      res.json(pendingStock);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/pending-stock/sync', async (req, res) => {
+    try {
+      if (!Array.isArray(req.body)) {
+        res.status(400).json({ error: 'Expected an array of pending stock records.' });
+        return;
+      }
+      await syncPendingStock(db, req.body);
+      res.json({ success: true, count: req.body.length });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

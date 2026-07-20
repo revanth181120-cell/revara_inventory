@@ -26,6 +26,18 @@ export interface ApiSale {
   saleDateTime: string;
 }
 
+export interface ApiPendingStockItem {
+  id: string;
+  saleId: string;
+  name: string;
+  category: string;
+  quantitySold: number;
+  sellingPrice: number;
+  costPrice: number;
+  saleDateTime: string;
+  resolved: boolean;
+}
+
 export async function checkApiHealth(): Promise<boolean> {
   try {
     const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(2000) });
@@ -47,6 +59,12 @@ export async function fetchSales(): Promise<ApiSale[]> {
   return res.json();
 }
 
+export async function fetchPendingStock(): Promise<ApiPendingStockItem[]> {
+  const res = await fetch(`${API_BASE}/pending-stock`);
+  if (!res.ok) throw new Error('Failed to fetch pending stock');
+  return res.json();
+}
+
 export async function syncProducts(products: ApiProduct[]): Promise<void> {
   await fetch(`${API_BASE}/products/sync`, {
     method: 'POST',
@@ -61,6 +79,15 @@ export async function syncSales(sales: ApiSale[]): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sales),
   });
+}
+
+export async function syncPendingStock(pendingStock: ApiPendingStockItem[]): Promise<void> {
+  const res = await fetch(`${API_BASE}/pending-stock/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(pendingStock),
+  });
+  if (!res.ok) throw new Error('Failed to sync pending stock');
 }
 
 export interface WhatsappInvoiceRecord {
