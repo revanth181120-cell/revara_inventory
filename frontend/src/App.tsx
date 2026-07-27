@@ -218,7 +218,7 @@ function App() {
   const handlePendingAddSubmit = (data: ProductFormData) => {
     const result = addProduct(data);
     if (result.success && pendingTarget) {
-      resolvePendingStock(pendingTarget.id);
+      resolvePendingStock(pendingTarget.id, data.code);
       showToast(`"${data.name}" added to inventory.`);
       setPendingTarget(null);
       setProductPrefill(null);
