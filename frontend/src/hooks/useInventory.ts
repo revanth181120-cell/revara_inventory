@@ -325,7 +325,7 @@ export function useInventory() {
           name: item.productName,
           category: item.category,
           quantitySold: item.quantity,
-          sellingPrice: finalUnitPrice,
+          sellingPrice: item.unitPrice,
           costPrice: item.costPrice,
           saleDateTime,
           resolved: false,
@@ -439,10 +439,19 @@ export function useInventory() {
     [sales, revertSales]
   );
 
-  const resolvePendingStock = useCallback((pendingId: string) => {
+  const resolvePendingStock = useCallback((pendingId: string, productCode?: string) => {
     setPendingStock((prev) =>
       prev.map((p) => (p.id === pendingId ? { ...p, resolved: true } : p))
     );
+    if (productCode) {
+      setSales((prev) =>
+        prev.map((s) =>
+          s.pendingStockId === pendingId
+            ? { ...s, productCode, isCustom: false }
+            : s
+        )
+      );
+    }
   }, []);
 
   const dismissPendingStock = useCallback((pendingId: string) => {
