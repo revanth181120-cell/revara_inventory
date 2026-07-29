@@ -34,15 +34,6 @@ export interface DbSale {
   sale_datetime: string;
 }
 
-export interface DbWhatsappInvoice {
-  id: string;
-  transaction_id: string;
-  customer_phone: string;
-  bill_total: number;
-  message_text: string;
-  sent_at: string;
-}
-
 function run(db: sqlite3.Database, sql: string, params: unknown[] = []): Promise<void> {
   return new Promise((resolve, reject) => {
     db.run(sql, params, (err) => (err ? reject(err) : resolve()));
@@ -109,15 +100,6 @@ export async function initDatabase(): Promise<sqlite3.Database> {
       // column already exists
     }
   }
-
-  await run(db, `CREATE TABLE IF NOT EXISTS whatsapp_invoices (
-    id TEXT PRIMARY KEY,
-    transaction_id TEXT NOT NULL,
-    customer_phone TEXT NOT NULL,
-    bill_total REAL DEFAULT 0,
-    message_text TEXT NOT NULL,
-    sent_at TEXT NOT NULL
-  )`);
 
   const suppliers = [
     ['GP', 'Gold Prince'],
@@ -220,42 +202,4 @@ export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof t
 
 export async function getSuppliers(db: sqlite3.Database) {
   return all<{ code: string; name: string }>(db, 'SELECT code, name FROM suppliers ORDER BY name');
-}
-
-export function toApiWhatsappInvoice(row: DbWhatsappInvoice) {
-  return {
-    id: row.id,
-    transactionId: row.transaction_id,
-    customerPhone: row.customer_phone,
-    billTotal: row.bill_total,
-    messageText: row.message_text,
-    sentAt: row.sent_at,
-  };
-}
-
-export async function getAllWhatsappInvoices(db: sqlite3.Database) {
-  const rows = await all<DbWhatsappInvoice>(
-    db,
-    'SELECT * FROM whatsapp_invoices ORDER BY sent_at DESC',
-  );
-  return rows.map(toApiWhatsappInvoice);
-}
-
-export async function insertWhatsappInvoice(
-  db: sqlite3.Database,
-  record: ReturnType<typeof toApiWhatsappInvoice>,
-) {
-  await run(
-    db,
-    `INSERT INTO whatsapp_invoices (id, transaction_id, customer_phone, bill_total, message_text, sent_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      record.id,
-      record.transactionId,
-      record.customerPhone,
-      record.billTotal,
-      record.messageText,
-      record.sentAt,
-    ],
-  );
 }

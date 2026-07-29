@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import sqlite3 from 'sqlite3';
 import {
   initDatabase,
   getAllProducts,
@@ -7,14 +8,11 @@ import {
   syncProducts,
   syncSales,
   getSuppliers,
-  getAllWhatsappInvoices,
-  insertWhatsappInvoice,
 } from './db';
 
 const PORT = process.env.PORT || 3001;
 
-async function main() {
-  const db = await initDatabase();
+export function createApp(db: sqlite3.Database) {
   const app = express();
 
   app.use(cors());
@@ -69,39 +67,18 @@ async function main() {
     }
   });
 
-  app.get('/api/whatsapp-invoices', async (_req, res) => {
-    try {
-      const invoices = await getAllWhatsappInvoices(db);
-      res.json(invoices);
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
+  return app;
+}
 
-  app.post('/api/whatsapp-invoices', async (req, res) => {
-    try {
-      const { id, transactionId, customerPhone, billTotal, messageText, sentAt } = req.body;
-      if (!id || !transactionId || !customerPhone || !messageText || !sentAt) {
-        res.status(400).json({ error: 'Missing required invoice fields.' });
-        return;
-      }
-      await insertWhatsappInvoice(db, {
-        id,
-        transactionId,
-        customerPhone,
-        billTotal: billTotal ?? 0,
-        messageText,
-        sentAt,
-      });
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: String(err) });
-    }
-  });
+async function main() {
+  const db = await initDatabase();
+  const app = createApp(db);
 
   app.listen(PORT, () => {
     console.log(`Revara API running on http://localhost:${PORT}`);
   });
 }
 
-main().catch(console.error);
+if (require.main === module) {
+  main().catch(console.error);
+}

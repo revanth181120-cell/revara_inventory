@@ -5,7 +5,6 @@ import {
   invoiceLineLabel,
   itemHasStoreOffer,
 } from '../types/Product';
-import { recordWhatsappInvoice } from '../api/inventoryApi';
 
 const WHATSAPP_PHONE_KEY = 'revara_whatsapp_phone';
 const LOCAL_SENT_INVOICES_KEY = 'revara_sent_whatsapp_invoices';
@@ -154,10 +153,7 @@ async function persistSentInvoice(
     sentAt: new Date().toISOString(),
   };
 
-  const savedToDb = await recordWhatsappInvoice(record);
-  if (!savedToDb) {
-    saveLocalSentInvoice(record);
-  }
+  saveLocalSentInvoice(record);
 }
 
 export function openInvoiceOnWhatsApp(
