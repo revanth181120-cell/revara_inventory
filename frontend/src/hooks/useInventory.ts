@@ -325,7 +325,7 @@ export function useInventory() {
           name: item.productName,
           category: item.category,
           quantitySold: item.quantity,
-          sellingPrice: finalUnitPrice,
+          sellingPrice: item.unitPrice,
           costPrice: item.costPrice,
           saleDateTime,
           resolved: false,
