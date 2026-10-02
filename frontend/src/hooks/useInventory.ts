@@ -291,8 +291,12 @@ export function useInventory() {
       return { success: false, error: 'Cart is empty.' };
     }
 
+    const checkoutItems: CartItem[] = [];
     for (const item of items) {
-      if (item.isCustom) continue;
+      if (item.isCustom) {
+        checkoutItems.push(item);
+        continue;
+      }
       const product = products.find((p) => p.id === item.productId);
       if (!product) {
         return { success: false, error: `Product ${item.productCode} not found.` };
@@ -300,16 +304,26 @@ export function useInventory() {
       if (product.quantity < item.quantity) {
         return { success: false, error: `Only ${product.quantity} of ${item.productCode} in stock.` };
       }
+      checkoutItems.push({
+        ...item,
+        productCode: product.code,
+        productName: product.name,
+        category: product.category || 'Uncategorized',
+        mrp: product.sellingPrice,
+        offerPrice: product.offerPrice,
+        unitPrice: getSalePrice(product),
+        costPrice: product.costPrice,
+      });
     }
 
-    const subtotal = items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+    const subtotal = checkoutItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
     const discount = Math.max(0, Math.min(billDiscount, subtotal));
     const total = subtotal - discount;
     const transactionId = generateId();
     const saleDateTime = new Date().toISOString();
     const newPending: PendingStockItem[] = [];
 
-    const saleRecords: SaleRecord[] = items.map((item) => {
+    const saleRecords: SaleRecord[] = checkoutItems.map((item) => {
       const lineSubtotal = item.unitPrice * item.quantity;
       const billShare = subtotal > 0 ? (lineSubtotal / subtotal) * discount : 0;
       const lineTotal = lineSubtotal - billShare;
@@ -352,7 +366,7 @@ export function useInventory() {
 
     setProducts((prev) => {
       const next = prev.map((p) => ({ ...p }));
-      for (const item of items) {
+      for (const item of checkoutItems) {
         if (item.isCustom || !item.productId) continue;
         const idx = next.findIndex((p) => p.id === item.productId);
         if (idx !== -1) {

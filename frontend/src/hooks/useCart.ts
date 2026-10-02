@@ -1,9 +1,20 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Product, CartItem, productToCartItem, createCustomCartItem, cartLineProfit } from '../types/Product';
 
 export function useCart(getProductById: (id: string) => Product | undefined) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [billDiscount, setBillDiscount] = useState(0);
+
+  useEffect(() => {
+    setItems((prev) =>
+      prev.flatMap((item) => {
+        if (item.isCustom) return [item];
+        const product = item.productId ? getProductById(item.productId) : undefined;
+        if (!product || product.quantity <= 0) return [];
+        return [productToCartItem(product, Math.min(item.quantity, product.quantity))];
+      })
+    );
+  }, [getProductById]);
 
   const addProduct = useCallback((product: Product, quantity = 1): { success: boolean; error?: string } => {
     if (product.quantity <= 0) {
