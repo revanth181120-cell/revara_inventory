@@ -18,6 +18,18 @@ const buildCode = (material: string, category: string, seq: string): string => {
   return `RV-${material}-${category}-${seqNum}`;
 };
 
+const NUMERIC_FIELDS: Array<keyof Pick<ProductFormData, 'quantity' | 'sellingPrice' | 'offerPrice' | 'costPrice'>> = [
+  'quantity',
+  'sellingPrice',
+  'offerPrice',
+  'costPrice',
+];
+
+function parseNonNegativeFinite(value: string): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, editProduct, prefill }) => {
   const [material, setMaterial] = useState('GP');
   const [category, setCategory] = useState('ER');
@@ -72,8 +84,8 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
     const { name, value } = e.target;
     setForm((f) => ({
       ...f,
-      [name]: name === 'quantity' || name === 'sellingPrice' || name === 'offerPrice' || name === 'costPrice'
-        ? parseFloat(value) || 0
+      [name]: NUMERIC_FIELDS.includes(name as typeof NUMERIC_FIELDS[number])
+        ? parseNonNegativeFinite(value)
         : value,
     }));
   };
@@ -98,6 +110,10 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
     setError('');
     if (!form.code.trim() || !form.name.trim()) {
       setError('Product code and name are required.');
+      return;
+    }
+    if (NUMERIC_FIELDS.some((field) => !Number.isFinite(form[field]) || form[field] < 0)) {
+      setError('Quantity and prices must be finite non-negative numbers.');
       return;
     }
     const result = onSubmit({

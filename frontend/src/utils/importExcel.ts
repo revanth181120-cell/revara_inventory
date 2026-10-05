@@ -115,16 +115,20 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
     const costPrice = parseNumber(findColumn(row, COST_PRICE_COLUMNS));
     const offerPrice = parseNumber(findColumn(row, OFFER_PRICE_COLUMNS));
 
-    if (isNaN(quantity) || quantity < 0) {
+    if (!Number.isFinite(quantity) || quantity < 0) {
       errors.push({ row: rowNum, error: `"${code}": invalid quantity` });
       return;
     }
-    if (isNaN(sellingPrice) || sellingPrice < 0) {
+    if (!Number.isFinite(sellingPrice) || sellingPrice < 0) {
       errors.push({ row: rowNum, error: `"${code}": invalid selling price` });
       return;
     }
-    if (isNaN(costPrice) || costPrice < 0) {
+    if (!Number.isFinite(costPrice) || costPrice < 0) {
       errors.push({ row: rowNum, error: `"${code}": invalid cost price` });
+      return;
+    }
+    if (!Number.isFinite(offerPrice) || offerPrice < 0) {
+      errors.push({ row: rowNum, error: `"${code}": invalid offer price` });
       return;
     }
 
