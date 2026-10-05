@@ -10,6 +10,11 @@ const PENDING_STOCK_KEY = 'revara_pending_stock';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+function normalizeNonNegativeNumber(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 function normalizeProduct(raw: Partial<Product> & { code: string; name: string }): Product {
   const now = new Date().toISOString();
   return {
@@ -18,10 +23,10 @@ function normalizeProduct(raw: Partial<Product> & { code: string; name: string }
     name: raw.name,
     category: raw.category || '',
     supplier: raw.supplier || parseSupplierFromCode(raw.code) || 'Unknown',
-    quantity: raw.quantity ?? 0,
-    sellingPrice: raw.sellingPrice ?? 0,
-    offerPrice: raw.offerPrice ?? 0,
-    costPrice: raw.costPrice ?? 0,
+    quantity: normalizeNonNegativeNumber(raw.quantity),
+    sellingPrice: normalizeNonNegativeNumber(raw.sellingPrice),
+    offerPrice: normalizeNonNegativeNumber(raw.offerPrice),
+    costPrice: normalizeNonNegativeNumber(raw.costPrice),
     imageUrl: raw.imageUrl,
     labelPrinted: raw.labelPrinted ?? false,
     createdAt: raw.createdAt || now,
@@ -115,7 +120,7 @@ export function useInventory() {
       try {
         const [apiProducts, apiSales] = await Promise.all([fetchProducts(), fetchSales()]);
         if (apiProducts.length > 0 || apiSales.length > 0) {
-          setProducts(apiProducts as Product[]);
+          setProducts(migrateStoredProducts(apiProducts as Product[]));
           setSales((apiSales as SaleRecord[]).map((s) => normalizeSaleRecord(s)));
         } else {
           const localProducts = localStorage.getItem(PRODUCTS_KEY);
