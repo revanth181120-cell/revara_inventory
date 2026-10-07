@@ -19,6 +19,10 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const getProductRef = useRef(getProductByCode);
   getProductRef.current = getProductByCode;
+  const onScanSellRef = useRef(onScanSell);
+  onScanSellRef.current = onScanSell;
+  const autoSellRef = useRef(autoSell);
+  autoSellRef.current = autoSell;
 
   const [scanState, setScanState] = useState<ScanState>('scanning');
   const [scannedCode, setScannedCode] = useState('');
@@ -30,21 +34,21 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
   const [stockUpdate, setStockUpdate] = useState<{ from: number; to: number } | null>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
 
-  const stopScanner = async () => {
+  const stopScanner = useCallback(async () => {
     if (scannerRef.current) {
       try {
         const state = scannerRef.current.getState();
         if (state === 2) await scannerRef.current.stop();
       } catch (_) { /* scanner may already be stopped */ }
     }
-  };
+  }, []);
 
   const completeSale = useCallback(async (code: string, found: Product, quantity: number = 1) => {
     await stopScanner();
-    const result = onScanSell(code, quantity);
+    const result = onScanSellRef.current(code, quantity);
     if (result.success && result.product) {
       setScanState('sold');
-      if (autoSell && result.previousQty != null) {
+      if (autoSellRef.current && result.previousQty != null) {
         setStockUpdate({
           from: result.previousQty,
           to: result.product.quantity,
@@ -57,7 +61,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       setMessage(result.error || 'Sale failed.');
       setScanState('not_found');
     }
-  }, [onScanSell]);
+  }, [stopScanner]);
 
   const lookupCode = useCallback((code: string, options?: { autoSellNow?: boolean }) => {
     const normalized = normalizeScannedCode(code);
@@ -66,7 +70,8 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
     if (found) {
       setProduct(found);
       setSellQty(1);
-      if (options?.autoSellNow ?? autoSell) {
+      const shouldAutoSell = options?.autoSellNow ?? autoSellRef.current;
+      if (shouldAutoSell) {
         void completeSale(normalized, found, 1);
         return;
       }
@@ -76,7 +81,7 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       setScanState('not_found');
       setMessage(`No product found for code: ${normalized}`);
     }
-  }, [autoSell, completeSale]);
+  }, [completeSale]);
 
   useHardwareScanner({
     enabled: scanState === 'scanning',
@@ -104,8 +109,8 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
       setMessage(`Camera error: ${err}`);
     });
 
-    return () => { stopScanner(); };
-  }, [lookupCode]);
+    return () => { void stopScanner(); };
+  }, [lookupCode, stopScanner]);
 
   const handleSell = async (quantity: number = 1) => {
     if (!scannedCode || !product) return;
