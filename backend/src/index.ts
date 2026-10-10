@@ -6,6 +6,7 @@ import {
   getAllSales,
   syncProducts,
   syncSales,
+  SyncValidationError,
   getSuppliers,
   getAllWhatsappInvoices,
   insertWhatsappInvoice,
@@ -56,6 +57,10 @@ async function main() {
       await syncProducts(db, req.body);
       res.json({ success: true, count: req.body.length });
     } catch (err) {
+      if (err instanceof SyncValidationError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
       res.status(500).json({ error: String(err) });
     }
   });
@@ -65,6 +70,10 @@ async function main() {
       await syncSales(db, req.body);
       res.json({ success: true, count: req.body.length });
     } catch (err) {
+      if (err instanceof SyncValidationError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
       res.status(500).json({ error: String(err) });
     }
   });
