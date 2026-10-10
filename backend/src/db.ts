@@ -170,6 +170,113 @@ export function toApiSale(row: DbSale) {
   };
 }
 
+export class SyncValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SyncValidationError';
+  }
+}
+
+type SyncRow = Record<string, unknown>;
+
+function describeField(rowIndex: number, field: string): string {
+  return `row ${rowIndex + 1} field "${field}"`;
+}
+
+function assertPlainRow(row: unknown, rowIndex: number): asserts row is SyncRow {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    throw new SyncValidationError(`Invalid sync payload: row ${rowIndex + 1} must be an object.`);
+  }
+}
+
+function assertRequiredString(row: SyncRow, rowIndex: number, field: string): void {
+  const value = row[field];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new SyncValidationError(`Invalid sync payload: ${describeField(rowIndex, field)} must be a non-empty string.`);
+  }
+}
+
+function assertString(row: SyncRow, rowIndex: number, field: string): void {
+  const value = row[field];
+  if (typeof value !== 'string') {
+    throw new SyncValidationError(`Invalid sync payload: ${describeField(rowIndex, field)} must be a string.`);
+  }
+}
+
+function assertOptionalString(row: SyncRow, rowIndex: number, field: string): void {
+  const value = row[field];
+  if (value !== undefined && typeof value !== 'string') {
+    throw new SyncValidationError(`Invalid sync payload: ${describeField(rowIndex, field)} must be a string when provided.`);
+  }
+}
+
+function assertOptionalNullableString(row: SyncRow, rowIndex: number, field: string): void {
+  const value = row[field];
+  if (value !== undefined && value !== null && typeof value !== 'string') {
+    throw new SyncValidationError(`Invalid sync payload: ${describeField(rowIndex, field)} must be a string when provided.`);
+  }
+}
+
+function assertNonNegativeNumber(row: SyncRow, rowIndex: number, field: string, options: { optional?: boolean; integer?: boolean } = {}): void {
+  const value = row[field];
+  if (value === undefined && options.optional) return;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new SyncValidationError(`Invalid sync payload: ${describeField(rowIndex, field)} must be a non-negative finite number.`);
+  }
+  if (options.integer && !Number.isInteger(value)) {
+    throw new SyncValidationError(`Invalid sync payload: ${describeField(rowIndex, field)} must be an integer.`);
+  }
+}
+
+function assertPositiveInteger(row: SyncRow, rowIndex: number, field: string): void {
+  const value = row[field];
+  if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value < 1) {
+    throw new SyncValidationError(`Invalid sync payload: ${describeField(rowIndex, field)} must be a positive integer.`);
+  }
+}
+
+export function validateProductsForSync(products: unknown): asserts products is ReturnType<typeof toApiProduct>[] {
+  if (!Array.isArray(products)) {
+    throw new SyncValidationError('Invalid sync payload: products must be an array.');
+  }
+  products.forEach((product, index) => {
+    assertPlainRow(product, index);
+    assertRequiredString(product, index, 'id');
+    assertRequiredString(product, index, 'code');
+    assertRequiredString(product, index, 'name');
+    assertRequiredString(product, index, 'createdAt');
+    assertRequiredString(product, index, 'updatedAt');
+    assertString(product, index, 'category');
+    assertString(product, index, 'supplier');
+    assertOptionalNullableString(product, index, 'imageUrl');
+    assertNonNegativeNumber(product, index, 'quantity', { integer: true });
+    assertNonNegativeNumber(product, index, 'sellingPrice');
+    assertNonNegativeNumber(product, index, 'offerPrice', { optional: true });
+    assertNonNegativeNumber(product, index, 'costPrice');
+  });
+}
+
+export function validateSalesForSync(sales: unknown): asserts sales is ReturnType<typeof toApiSale>[] {
+  if (!Array.isArray(sales)) {
+    throw new SyncValidationError('Invalid sync payload: sales must be an array.');
+  }
+  sales.forEach((sale, index) => {
+    assertPlainRow(sale, index);
+    assertRequiredString(sale, index, 'id');
+    assertRequiredString(sale, index, 'productCode');
+    assertRequiredString(sale, index, 'productName');
+    assertRequiredString(sale, index, 'saleDateTime');
+    assertOptionalNullableString(sale, index, 'transactionId');
+    assertOptionalString(sale, index, 'category');
+    assertPositiveInteger(sale, index, 'quantitySold');
+    assertNonNegativeNumber(sale, index, 'salePrice');
+    assertNonNegativeNumber(sale, index, 'costPrice');
+    assertNonNegativeNumber(sale, index, 'mrp', { optional: true });
+    assertNonNegativeNumber(sale, index, 'offerPrice', { optional: true });
+    assertNonNegativeNumber(sale, index, 'lineDiscount', { optional: true });
+  });
+}
+
 export async function getAllProducts(db: sqlite3.Database) {
   const rows = await all<DbProduct>(db, 'SELECT * FROM products ORDER BY code');
   return rows.map(toApiProduct);
@@ -181,6 +288,7 @@ export async function getAllSales(db: sqlite3.Database) {
 }
 
 export async function syncProducts(db: sqlite3.Database, products: ReturnType<typeof toApiProduct>[]) {
+  validateProductsForSync(products);
   await run(db, 'BEGIN TRANSACTION');
   try {
     await run(db, 'DELETE FROM products');
@@ -200,6 +308,7 @@ export async function syncProducts(db: sqlite3.Database, products: ReturnType<ty
 }
 
 export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof toApiSale>[]) {
+  validateSalesForSync(sales);
   await run(db, 'BEGIN TRANSACTION');
   try {
     await run(db, 'DELETE FROM sales');
