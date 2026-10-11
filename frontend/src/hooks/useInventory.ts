@@ -57,6 +57,14 @@ function isSameWeek(iso: string, date: Date): boolean {
   return d >= start && d < end;
 }
 
+function isValidSaleAmount(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function isValidSaleQuantity(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
 export function useInventory() {
   const [apiConnected, setApiConnected] = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -290,8 +298,20 @@ export function useInventory() {
     if (items.length === 0) {
       return { success: false, error: 'Cart is empty.' };
     }
+    if (!isValidSaleAmount(billDiscount)) {
+      return { success: false, error: 'Enter a valid bill discount.' };
+    }
 
     for (const item of items) {
+      if (!isValidSaleQuantity(item.quantity)) {
+        return { success: false, error: `Enter a valid quantity for ${item.productCode}.` };
+      }
+      if (!isValidSaleAmount(item.unitPrice) || item.unitPrice <= 0) {
+        return { success: false, error: `Enter a valid selling price for ${item.productCode}.` };
+      }
+      if (!isValidSaleAmount(item.costPrice) || !isValidSaleAmount(item.mrp) || !isValidSaleAmount(item.offerPrice)) {
+        return { success: false, error: `Enter valid prices for ${item.productCode}.` };
+      }
       if (item.isCustom) continue;
       const product = products.find((p) => p.id === item.productId);
       if (!product) {

@@ -1,6 +1,14 @@
 import { useState, useCallback, useMemo } from 'react';
 import { Product, CartItem, productToCartItem, createCustomCartItem, cartLineProfit } from '../types/Product';
 
+function isFiniteNonNegative(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function isValidCartQuantity(value: number): boolean {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
 export function useCart(getProductById: (id: string) => Product | undefined) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [billDiscount, setBillDiscount] = useState(0);
@@ -43,8 +51,14 @@ export function useCart(getProductById: (id: string) => Product | undefined) {
     if (!input.name.trim()) {
       return { success: false, error: 'Enter a name for the item.' };
     }
-    if (input.unitPrice <= 0) {
+    if (!Number.isFinite(input.unitPrice) || input.unitPrice <= 0) {
       return { success: false, error: 'Enter a selling price greater than 0.' };
+    }
+    if (input.costPrice !== undefined && !isFiniteNonNegative(input.costPrice)) {
+      return { success: false, error: 'Enter a valid cost price.' };
+    }
+    if (input.quantity !== undefined && !isValidCartQuantity(input.quantity)) {
+      return { success: false, error: 'Enter a valid whole-number quantity.' };
     }
     setItems((prev) => [...prev, createCustomCartItem(input)]);
     return { success: true };
@@ -85,6 +99,10 @@ export function useCart(getProductById: (id: string) => Product | undefined) {
     setBillDiscount(0);
   }, []);
 
+  const updateBillDiscount = useCallback((value: number) => {
+    setBillDiscount(Number.isFinite(value) && value >= 0 ? value : 0);
+  }, []);
+
   const subtotal = useMemo(
     () => items.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0),
     [items]
@@ -102,7 +120,7 @@ export function useCart(getProductById: (id: string) => Product | undefined) {
   return {
     items,
     billDiscount,
-    setBillDiscount,
+    setBillDiscount: updateBillDiscount,
     addProduct,
     addCustomItem,
     addByCode,
