@@ -43,8 +43,8 @@ export const InvoicePrint: React.FC<InvoicePrintProps> = ({ transaction, onClose
     `);
     win.document.close();
     win.focus();
+    win.addEventListener('afterprint', () => win.close(), { once: true });
     win.print();
-    win.close();
   };
 
   const handleWhatsApp = () => {
