@@ -63,10 +63,12 @@ export function buildLabelPrintStyles(dimensions: LabelDimensions): string {
 
   return `
     @page {
+      size: ${rowWidthMm}mm ${pageHeightMm}mm;
       margin: 0;
     }
     @media print {
       @page {
+        size: ${rowWidthMm}mm ${pageHeightMm}mm;
         margin: 0;
       }
     }
