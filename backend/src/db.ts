@@ -1,7 +1,19 @@
 import sqlite3 from 'sqlite3';
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
-const DB_PATH = path.join(__dirname, '..', 'database', 'inventory.db');
+const LEGACY_DB_PATH = path.join(__dirname, '..', 'database', 'inventory.db');
+const DEFAULT_DB_PATH = path.join(
+  process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share'),
+  'revara-inventory',
+  'inventory.db',
+);
+
+export function getDatabasePath(): string {
+  const configuredPath = process.env.INVENTORY_DB_PATH?.trim();
+  return configuredPath ? path.resolve(configuredPath) : DEFAULT_DB_PATH;
+}
 
 export interface DbProduct {
   id: string;
@@ -56,7 +68,20 @@ function all<T>(db: sqlite3.Database, sql: string, params: unknown[] = []): Prom
 }
 
 export async function initDatabase(): Promise<sqlite3.Database> {
-  const db = new sqlite3.Database(DB_PATH);
+  const dbPath = getDatabasePath();
+  await fs.promises.mkdir(path.dirname(dbPath), { recursive: true });
+
+  if (dbPath !== LEGACY_DB_PATH && !fs.existsSync(dbPath) && fs.existsSync(LEGACY_DB_PATH)) {
+    try {
+      await fs.promises.copyFile(LEGACY_DB_PATH, dbPath, fs.constants.COPYFILE_EXCL);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw err;
+      }
+    }
+  }
+
+  const db = new sqlite3.Database(dbPath);
 
   await run(db, `CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
