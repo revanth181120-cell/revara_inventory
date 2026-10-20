@@ -33,6 +33,26 @@ function migrateStoredProducts(stored: unknown[]): Product[] {
   return stored.map((item) => normalizeProduct(item as Partial<Product> & { code: string; name: string }));
 }
 
+function parseStoredProducts(raw: string | null): Product[] {
+  return raw ? migrateStoredProducts(JSON.parse(raw)) : [];
+}
+
+function parseStoredSales(raw: string | null): SaleRecord[] {
+  const parsed: SaleRecord[] = raw ? JSON.parse(raw) : [];
+  return parsed.map((s) => normalizeSaleRecord(s));
+}
+
+function parseStoredPendingStock(raw: string | null): PendingStockItem[] {
+  return raw ? JSON.parse(raw) : [];
+}
+
+function writeStoredValue(key: string, value: unknown): void {
+  const serialized = JSON.stringify(value);
+  if (localStorage.getItem(key) !== serialized) {
+    localStorage.setItem(key, serialized);
+  }
+}
+
 function isSameDay(iso: string, date: Date): boolean {
   const d = new Date(iso);
   return (
@@ -64,8 +84,7 @@ export function useInventory() {
 
   const [products, setProducts] = useState<Product[]>(() => {
     try {
-      const stored = localStorage.getItem(PRODUCTS_KEY);
-      return stored ? migrateStoredProducts(JSON.parse(stored)) : [];
+      return parseStoredProducts(localStorage.getItem(PRODUCTS_KEY));
     } catch {
       return [];
     }
@@ -73,9 +92,7 @@ export function useInventory() {
 
   const [sales, setSales] = useState<SaleRecord[]>(() => {
     try {
-      const stored = localStorage.getItem(SALES_KEY);
-      const parsed: SaleRecord[] = stored ? JSON.parse(stored) : [];
-      return parsed.map((s) => normalizeSaleRecord(s));
+      return parseStoredSales(localStorage.getItem(SALES_KEY));
     } catch {
       return [];
     }
@@ -83,24 +100,46 @@ export function useInventory() {
 
   const [pendingStock, setPendingStock] = useState<PendingStockItem[]>(() => {
     try {
-      const stored = localStorage.getItem(PENDING_STOCK_KEY);
-      return stored ? JSON.parse(stored) : [];
+      return parseStoredPendingStock(localStorage.getItem(PENDING_STOCK_KEY));
     } catch {
       return [];
     }
   });
 
   useEffect(() => {
-    localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products));
+    writeStoredValue(PRODUCTS_KEY, products);
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem(SALES_KEY, JSON.stringify(sales));
+    writeStoredValue(SALES_KEY, sales);
   }, [sales]);
 
   useEffect(() => {
-    localStorage.setItem(PENDING_STOCK_KEY, JSON.stringify(pendingStock));
+    writeStoredValue(PENDING_STOCK_KEY, pendingStock);
   }, [pendingStock]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage) return;
+
+      try {
+        if (event.key === PRODUCTS_KEY || event.key === null) {
+          setProducts(parseStoredProducts(event.key === null ? localStorage.getItem(PRODUCTS_KEY) : event.newValue));
+        }
+        if (event.key === SALES_KEY || event.key === null) {
+          setSales(parseStoredSales(event.key === null ? localStorage.getItem(SALES_KEY) : event.newValue));
+        }
+        if (event.key === PENDING_STOCK_KEY || event.key === null) {
+          setPendingStock(parseStoredPendingStock(event.key === null ? localStorage.getItem(PENDING_STOCK_KEY) : event.newValue));
+        }
+      } catch {
+        // Preserve the current in-memory copy if another tab writes a malformed snapshot.
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   // Load from SQLite API on startup, fallback to localStorage
   useEffect(() => {
