@@ -1,4 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+const HEALTH_TIMEOUT_MS = 2000;
+const READ_TIMEOUT_MS = 5000;
 
 export interface ApiProduct {
   id: string;
@@ -28,7 +30,7 @@ export interface ApiSale {
 
 export async function checkApiHealth(): Promise<boolean> {
   try {
-    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(2000) });
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
     return res.ok;
   } catch {
     return false;
@@ -36,13 +38,13 @@ export async function checkApiHealth(): Promise<boolean> {
 }
 
 export async function fetchProducts(): Promise<ApiProduct[]> {
-  const res = await fetch(`${API_BASE}/products`);
+  const res = await fetch(`${API_BASE}/products`, { signal: AbortSignal.timeout(READ_TIMEOUT_MS) });
   if (!res.ok) throw new Error('Failed to fetch products');
   return res.json();
 }
 
 export async function fetchSales(): Promise<ApiSale[]> {
-  const res = await fetch(`${API_BASE}/sales`);
+  const res = await fetch(`${API_BASE}/sales`, { signal: AbortSignal.timeout(READ_TIMEOUT_MS) });
   if (!res.ok) throw new Error('Failed to fetch sales');
   return res.json();
 }
