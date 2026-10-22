@@ -63,7 +63,7 @@ export interface ImportSummary {
 }
 
 export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
-  const valid: ProductFormData[] = [];
+  const validRows: Array<{ row: number; data: ProductFormData }> = [];
   const errors: ImportRowResult[] = [];
   const warnings: string[] = [];
   let skipped = 0;
@@ -157,17 +157,50 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
     const supplierRaw = findColumn(row, SUPPLIER_COLUMNS);
     const categoryRaw = findColumn(row, CATEGORY_COLUMNS);
 
-    valid.push({
-      code,
-      name,
-      category: parseCategory(String(categoryRaw || ''), code),
-      supplier: String(supplierRaw || parseSupplierFromCode(code) || 'Unknown').trim(),
-      quantity,
-      sellingPrice,
-      offerPrice: offerPrice > 0 ? offerPrice : 0,
-      costPrice,
+    validRows.push({
+      row: rowNum,
+      data: {
+        code,
+        name,
+        category: parseCategory(String(categoryRaw || ''), code),
+        supplier: String(supplierRaw || parseSupplierFromCode(code) || 'Unknown').trim(),
+        quantity,
+        sellingPrice,
+        offerPrice: offerPrice > 0 ? offerPrice : 0,
+        costPrice,
+      },
     });
   });
+
+  const rowsByCode = validRows.reduce<Map<string, Array<{ row: number; code: string }>>>(
+    (acc, item) => {
+      const key = item.data.code.trim().toLowerCase();
+      const matches = acc.get(key) || [];
+      matches.push({ row: item.row, code: item.data.code });
+      acc.set(key, matches);
+      return acc;
+    },
+    new Map()
+  );
+  const duplicateCodes = new Set<string>();
+
+  rowsByCode.forEach((matches, key) => {
+    if (matches.length <= 1) return;
+    duplicateCodes.add(key);
+    const rowList = matches.map((m) => m.row).join(', ');
+    for (const match of matches) {
+      errors.push({
+        row: match.row,
+        error:
+          `"${match.code}": duplicate product code in this file (rows ${rowList}). ` +
+          'Remove duplicates before importing.',
+      });
+    }
+  });
+
+  const valid = validRows
+    .filter((item) => !duplicateCodes.has(item.data.code.trim().toLowerCase()))
+    .map((item) => item.data);
 
   return { valid, errors, warnings: [...new Set(warnings)], skipped, detectedColumns };
 }
