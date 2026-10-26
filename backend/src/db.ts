@@ -43,6 +43,13 @@ export interface DbWhatsappInvoice {
   sent_at: string;
 }
 
+export class SyncValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SyncValidationError';
+  }
+}
+
 function run(db: sqlite3.Database, sql: string, params: unknown[] = []): Promise<void> {
   return new Promise((resolve, reject) => {
     db.run(sql, params, (err) => (err ? reject(err) : resolve()));
@@ -180,7 +187,29 @@ export async function getAllSales(db: sqlite3.Database) {
   return rows.map(toApiSale);
 }
 
+function validateProductCodeUniqueness(products: ReturnType<typeof toApiProduct>[]): void {
+  const seen = new Map<string, string>();
+
+  for (const product of products) {
+    const code = product.code;
+    if (typeof code !== 'string') continue;
+    const key = code.trim().toLowerCase();
+    if (!key) continue;
+
+    const firstCode = seen.get(key);
+    if (firstCode !== undefined) {
+      throw new SyncValidationError(
+        `Duplicate product code "${code}" conflicts with "${firstCode}". Product codes must be unique ignoring case and surrounding spaces.`,
+      );
+    }
+
+    seen.set(key, code);
+  }
+}
+
 export async function syncProducts(db: sqlite3.Database, products: ReturnType<typeof toApiProduct>[]) {
+  validateProductCodeUniqueness(products);
+
   await run(db, 'BEGIN TRANSACTION');
   try {
     await run(db, 'DELETE FROM products');
