@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Product, SaleRecord, ProductFormData, CartItem, CompletedTransaction, PendingStockItem, parseSupplierFromCode, getSalePrice, normalizeSaleRecord, saleLineProfit, productUnitProfit } from '../types/Product';
-import { checkApiHealth, fetchProducts, fetchSales, syncProducts, syncSales } from '../api/inventoryApi';
+import { checkApiHealth, fetchProducts, fetchSales, syncInventory } from '../api/inventoryApi';
 import { isOutOfStock, isLowStock, isMediumStock, isHealthyStock } from '../utils/stockTiers';
 
 const PRODUCTS_KEY = 'revara_products';
@@ -120,16 +120,14 @@ export function useInventory() {
         } else {
           const localProducts = localStorage.getItem(PRODUCTS_KEY);
           const localSales = localStorage.getItem(SALES_KEY);
-          if (localProducts) {
-            const parsed = migrateStoredProducts(JSON.parse(localProducts));
-            setProducts(parsed);
-            await syncProducts(parsed);
-          }
-          if (localSales) {
-            const parsed: SaleRecord[] = JSON.parse(localSales);
-            const normalized = parsed.map((s) => normalizeSaleRecord(s));
-            setSales(normalized);
-            await syncSales(normalized);
+          const parsedProducts = localProducts ? migrateStoredProducts(JSON.parse(localProducts)) : [];
+          const parsedSales = localSales
+            ? (JSON.parse(localSales) as SaleRecord[]).map((s) => normalizeSaleRecord(s))
+            : [];
+          if (localProducts) setProducts(parsedProducts);
+          if (localSales) setSales(parsedSales);
+          if (localProducts || localSales) {
+            await syncInventory(parsedProducts, parsedSales);
           }
         }
       } catch {
@@ -145,8 +143,7 @@ export function useInventory() {
     if (!apiConnected || !readyForSync.current) return;
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => {
-      syncProducts(products).catch(() => setApiConnected(false));
-      syncSales(sales).catch(() => setApiConnected(false));
+      syncInventory(products, sales).catch(() => setApiConnected(false));
     }, 800);
     return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
   }, [products, sales, apiConnected]);

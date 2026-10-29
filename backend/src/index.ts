@@ -4,6 +4,7 @@ import {
   initDatabase,
   getAllProducts,
   getAllSales,
+  syncInventory,
   syncProducts,
   syncSales,
   getSuppliers,
@@ -64,6 +65,20 @@ async function main() {
     try {
       await syncSales(db, req.body);
       res.json({ success: true, count: req.body.length });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/sync', async (req, res) => {
+    try {
+      const { products, sales } = req.body;
+      if (!Array.isArray(products) || !Array.isArray(sales)) {
+        res.status(400).json({ error: 'Expected products and sales arrays.' });
+        return;
+      }
+      await syncInventory(db, products, sales);
+      res.json({ success: true, productCount: products.length, saleCount: sales.length });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }

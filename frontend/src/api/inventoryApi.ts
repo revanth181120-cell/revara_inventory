@@ -63,6 +63,15 @@ export async function syncSales(sales: ApiSale[]): Promise<void> {
   });
 }
 
+export async function syncInventory(products: ApiProduct[], sales: ApiSale[]): Promise<void> {
+  const res = await fetch(`${API_BASE}/sync`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ products, sales }),
+  });
+  if (!res.ok) throw new Error('Failed to sync inventory');
+}
+
 export interface WhatsappInvoiceRecord {
   id: string;
   transactionId: string;
