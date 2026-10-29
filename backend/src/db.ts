@@ -185,12 +185,7 @@ export async function syncProducts(db: sqlite3.Database, products: ReturnType<ty
   try {
     await run(db, 'DELETE FROM products');
     for (const p of products) {
-      await run(db, `INSERT INTO products (id, code, name, category, supplier, quantity, selling_price, offer_price, cost_price, image_url, label_printed, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-        p.id, p.code, p.name, p.category, p.supplier, p.quantity,
-        p.sellingPrice, p.offerPrice ?? 0, p.costPrice, p.imageUrl || null, p.labelPrinted ? 1 : 0,
-        p.createdAt, p.updatedAt,
-      ]);
+      await insertProduct(db, p);
     }
     await run(db, 'COMMIT');
   } catch (e) {
@@ -204,12 +199,47 @@ export async function syncSales(db: sqlite3.Database, sales: ReturnType<typeof t
   try {
     await run(db, 'DELETE FROM sales');
     for (const s of sales) {
-      await run(db, `INSERT INTO sales (id, transaction_id, product_code, product_name, category, quantity_sold, mrp, offer_price, line_discount, sale_price, cost_price, sale_datetime)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-        s.id, s.transactionId || null, s.productCode, s.productName, s.category || '',
-        s.quantitySold, s.mrp ?? s.salePrice, s.offerPrice ?? 0, s.lineDiscount ?? 0,
-        s.salePrice, s.costPrice, s.saleDateTime,
-      ]);
+      await insertSale(db, s);
+    }
+    await run(db, 'COMMIT');
+  } catch (e) {
+    await run(db, 'ROLLBACK');
+    throw e;
+  }
+}
+
+async function insertProduct(db: sqlite3.Database, p: ReturnType<typeof toApiProduct>) {
+  await run(db, `INSERT INTO products (id, code, name, category, supplier, quantity, selling_price, offer_price, cost_price, image_url, label_printed, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    p.id, p.code, p.name, p.category, p.supplier, p.quantity,
+    p.sellingPrice, p.offerPrice ?? 0, p.costPrice, p.imageUrl || null, p.labelPrinted ? 1 : 0,
+    p.createdAt, p.updatedAt,
+  ]);
+}
+
+async function insertSale(db: sqlite3.Database, s: ReturnType<typeof toApiSale>) {
+  await run(db, `INSERT INTO sales (id, transaction_id, product_code, product_name, category, quantity_sold, mrp, offer_price, line_discount, sale_price, cost_price, sale_datetime)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+    s.id, s.transactionId || null, s.productCode, s.productName, s.category || '',
+    s.quantitySold, s.mrp ?? s.salePrice, s.offerPrice ?? 0, s.lineDiscount ?? 0,
+    s.salePrice, s.costPrice, s.saleDateTime,
+  ]);
+}
+
+export async function syncInventory(
+  db: sqlite3.Database,
+  products: ReturnType<typeof toApiProduct>[],
+  sales: ReturnType<typeof toApiSale>[],
+) {
+  await run(db, 'BEGIN TRANSACTION');
+  try {
+    await run(db, 'DELETE FROM products');
+    await run(db, 'DELETE FROM sales');
+    for (const p of products) {
+      await insertProduct(db, p);
+    }
+    for (const s of sales) {
+      await insertSale(db, s);
     }
     await run(db, 'COMMIT');
   } catch (e) {
