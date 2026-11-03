@@ -59,8 +59,11 @@ function isSameWeek(iso: string, date: Date): boolean {
 
 export function useInventory() {
   const [apiConnected, setApiConnected] = useState(false);
+  const [hydrationComplete, setHydrationComplete] = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const readyForSync = useRef(false);
+  const productsChangedDuringHydration = useRef(false);
+  const salesChangedDuringHydration = useRef(false);
 
   const [products, setProducts] = useState<Product[]>(() => {
     try {
@@ -109,23 +112,28 @@ export function useInventory() {
       setApiConnected(healthy);
       if (!healthy) {
         readyForSync.current = true;
+        setHydrationComplete(true);
         return;
       }
 
       try {
         const [apiProducts, apiSales] = await Promise.all([fetchProducts(), fetchSales()]);
         if (apiProducts.length > 0 || apiSales.length > 0) {
-          setProducts(apiProducts as Product[]);
-          setSales((apiSales as SaleRecord[]).map((s) => normalizeSaleRecord(s)));
+          if (!productsChangedDuringHydration.current) {
+            setProducts(apiProducts as Product[]);
+          }
+          if (!salesChangedDuringHydration.current) {
+            setSales((apiSales as SaleRecord[]).map((s) => normalizeSaleRecord(s)));
+          }
         } else {
           const localProducts = localStorage.getItem(PRODUCTS_KEY);
           const localSales = localStorage.getItem(SALES_KEY);
-          if (localProducts) {
+          if (localProducts && !productsChangedDuringHydration.current) {
             const parsed = migrateStoredProducts(JSON.parse(localProducts));
             setProducts(parsed);
             await syncProducts(parsed);
           }
-          if (localSales) {
+          if (localSales && !salesChangedDuringHydration.current) {
             const parsed: SaleRecord[] = JSON.parse(localSales);
             const normalized = parsed.map((s) => normalizeSaleRecord(s));
             setSales(normalized);
@@ -136,20 +144,21 @@ export function useInventory() {
         setApiConnected(false);
       } finally {
         readyForSync.current = true;
+        setHydrationComplete(true);
       }
     })();
   }, []);
 
   // Debounced sync to SQLite when data changes
   useEffect(() => {
-    if (!apiConnected || !readyForSync.current) return;
+    if (!apiConnected || !hydrationComplete || !readyForSync.current) return;
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => {
       syncProducts(products).catch(() => setApiConnected(false));
       syncSales(sales).catch(() => setApiConnected(false));
     }, 800);
     return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
-  }, [products, sales, apiConnected]);
+  }, [products, sales, apiConnected, hydrationComplete]);
 
   const addProduct = useCallback((data: ProductFormData): { success: boolean; error?: string } => {
     let added = false;
@@ -161,6 +170,7 @@ export function useInventory() {
         error = `Product code "${data.code}" already exists.`;
         return prev;
       }
+      if (!readyForSync.current) productsChangedDuringHydration.current = true;
       const now = new Date().toISOString();
       const newProduct: Product = {
         ...data,
@@ -197,6 +207,7 @@ export function useInventory() {
 
         if (existingIdx !== undefined) {
           const existing = next[existingIdx];
+          if (!readyForSync.current) productsChangedDuringHydration.current = true;
           next[existingIdx] = {
             ...existing,
             ...data,
@@ -206,6 +217,7 @@ export function useInventory() {
           };
           updatedCount++;
         } else {
+          if (!readyForSync.current) productsChangedDuringHydration.current = true;
           next.push({
             ...data,
             code: data.code.trim(),
@@ -237,6 +249,7 @@ export function useInventory() {
         error = `Product code "${data.code}" already exists.`;
         return prev;
       }
+      if (!readyForSync.current) productsChangedDuringHydration.current = true;
       updated = true;
       return prev.map((p) =>
         p.id === id
@@ -254,16 +267,20 @@ export function useInventory() {
   }, []);
 
   const deleteProduct = useCallback((id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setProducts((prev) => {
+      if (!prev.some((p) => p.id === id)) return prev;
+      if (!readyForSync.current) productsChangedDuringHydration.current = true;
+      return prev.filter((p) => p.id !== id);
+    });
   }, []);
 
   const restockProduct = useCallback((id: string, amount: number = 1) => {
     setProducts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? { ...p, quantity: p.quantity + amount, updatedAt: new Date().toISOString() }
-          : p
-      )
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        if (!readyForSync.current) productsChangedDuringHydration.current = true;
+        return { ...p, quantity: p.quantity + amount, updatedAt: new Date().toISOString() };
+      })
     );
   }, []);
 
@@ -283,7 +300,10 @@ export function useInventory() {
       costPrice: product.costPrice,
       saleDateTime: new Date().toISOString(),
     });
-    setSales((prev) => [saleRecord, ...prev]);
+    setSales((prev) => {
+      if (!readyForSync.current) salesChangedDuringHydration.current = true;
+      return [saleRecord, ...prev];
+    });
   }, []);
 
   const completeCartSale = useCallback((items: CartItem[], billDiscount: number): { success: boolean; error?: string; transaction?: CompletedTransaction } => {
@@ -356,6 +376,7 @@ export function useInventory() {
         if (item.isCustom || !item.productId) continue;
         const idx = next.findIndex((p) => p.id === item.productId);
         if (idx !== -1) {
+          if (!readyForSync.current) productsChangedDuringHydration.current = true;
           next[idx] = {
             ...next[idx],
             quantity: next[idx].quantity - item.quantity,
@@ -366,7 +387,10 @@ export function useInventory() {
       return next;
     });
 
-    setSales((prev) => [...saleRecords, ...prev]);
+    setSales((prev) => {
+      if (!readyForSync.current) salesChangedDuringHydration.current = true;
+      return [...saleRecords, ...prev];
+    });
     if (newPending.length > 0) {
       setPendingStock((prev) => [...newPending, ...prev]);
     }
@@ -400,7 +424,10 @@ export function useInventory() {
       toRevert.filter((s) => s.pendingStockId).map((s) => s.pendingStockId as string)
     );
 
-    setSales((prev) => prev.filter((s) => !idSet.has(s.id)));
+    setSales((prev) => {
+      if (!readyForSync.current) salesChangedDuringHydration.current = true;
+      return prev.filter((s) => !idSet.has(s.id));
+    });
     setPendingStock((prev) =>
       prev.filter((p) => !revertedPendingIds.has(p.id) && !revertedIds.has(p.saleId))
     );
@@ -410,6 +437,7 @@ export function useInventory() {
         if (sale.isCustom) continue;
         const idx = next.findIndex((p) => p.code.toLowerCase() === sale.productCode.toLowerCase());
         if (idx !== -1) {
+          if (!readyForSync.current) productsChangedDuringHydration.current = true;
           next[idx] = {
             ...next[idx],
             quantity: next[idx].quantity + sale.quantitySold,
@@ -470,6 +498,7 @@ export function useInventory() {
         quantity: product.quantity - quantity,
         updatedAt: new Date().toISOString(),
       };
+      if (!readyForSync.current) productsChangedDuringHydration.current = true;
       saleToRecord = { product, quantity };
       result = { success: true, product: updated };
       return prev.map((p) => (p.id === id ? updated : p));
@@ -499,11 +528,16 @@ export function useInventory() {
 
   const markLabelsPrinted = useCallback((ids: string[]) => {
     const idSet = new Set(ids);
-    setProducts((prev) =>
-      prev.map((p) =>
-        idSet.has(p.id) ? { ...p, labelPrinted: true, updatedAt: new Date().toISOString() } : p
-      )
-    );
+    setProducts((prev) => {
+      let changed = false;
+      const next = prev.map((p) => {
+        if (!idSet.has(p.id)) return p;
+        changed = true;
+        return { ...p, labelPrinted: true, updatedAt: new Date().toISOString() };
+      });
+      if (changed && !readyForSync.current) productsChangedDuringHydration.current = true;
+      return next;
+    });
   }, []);
 
   const exportToExcel = useCallback(() => {
