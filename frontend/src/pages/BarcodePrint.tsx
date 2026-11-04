@@ -8,8 +8,17 @@ interface BarcodePrintProps {
   onClose: () => void;
 }
 
+const MIN_COPIES = 1;
+const MAX_COPIES = 50;
+
+function parseCopyCount(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return MIN_COPIES;
+  return Math.min(MAX_COPIES, Math.max(MIN_COPIES, parsed));
+}
+
 export const BarcodePrint: React.FC<BarcodePrintProps> = ({ product, onClose }) => {
-  const [copies, setCopies] = useState(1);
+  const [copies, setCopies] = useState(MIN_COPIES);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -31,10 +40,10 @@ export const BarcodePrint: React.FC<BarcodePrintProps> = ({ product, onClose }) 
             <label>Copies:</label>
             <input
               type="number"
-              min={1}
-              max={50}
+              min={MIN_COPIES}
+              max={MAX_COPIES}
               value={copies}
-              onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value) || 1))}
+              onChange={(e) => setCopies(parseCopyCount(e.target.value))}
             />
           </div>
           <div className="print-controls__actions">
