@@ -1,4 +1,6 @@
-import { ProductFormData, parseSupplierFromCode, CATEGORY_MAP } from '../types/Product';
+import * as XLSX from 'xlsx';
+import type { CellObject } from 'xlsx';
+import { parseSupplierFromCode, CATEGORY_MAP, type ProductFormData } from '../types/Product';
 
 /** Priority order — first match wins. Offer Price is intentionally excluded from selling. */
 const SELLING_PRICE_COLUMNS = [
@@ -16,6 +18,82 @@ const NAME_COLUMNS = ['Product Name', 'name', 'Name', 'Item Name', 'Description'
 const CATEGORY_COLUMNS = ['Category', 'category', 'Type', 'Product Type', 'Item Category'];
 const SUPPLIER_COLUMNS = ['Supplier', 'supplier', 'Vendor', 'Wholesaler', 'Source'];
 const QTY_COLUMNS = ['Qty', 'quantity', 'Quantity', 'Stock', 'Units', 'QTY'];
+
+const MAX_EXCEL_NUMERIC_CODE_DIGITS = 15;
+const IMPORT_ROW_META = Symbol('importRowMeta');
+
+type ImportRowMeta = {
+  sourceRowNumber: number;
+  unsafeNumericCode: boolean;
+};
+
+type ImportRow = Record<string, unknown> & {
+  [IMPORT_ROW_META]?: ImportRowMeta;
+};
+
+function normalizeColumnName(value: string): string {
+  return value.toLowerCase().trim();
+}
+
+function isAlias(header: string, aliases: string[]): boolean {
+  const normalized = normalizeColumnName(header);
+  return aliases.some((alias) => normalized === normalizeColumnName(alias));
+}
+
+function cellDisplayText(cell: CellObject | undefined): string {
+  if (!cell) return '';
+  if (cell.w !== undefined) return String(cell.w);
+  const formatted = XLSX.utils.format_cell(cell);
+  if (formatted !== undefined && formatted !== null) return String(formatted);
+  return cell.v === undefined || cell.v === null ? '' : String(cell.v);
+}
+
+function hasUnsafeNumericCode(cell: CellObject | undefined): boolean {
+  if (!cell || cell.t !== 'n') return false;
+  const value = typeof cell.v === 'number' ? cell.v : Number(cell.v);
+  if (!Number.isFinite(value) || !Number.isInteger(value)) return true;
+  if (value === 0) return false;
+  return Math.floor(Math.log10(Math.abs(value))) + 1 > MAX_EXCEL_NUMERIC_CODE_DIGITS;
+}
+
+export function worksheetToImportRows(worksheet: XLSX.WorkSheet): Record<string, unknown>[] {
+  const ref = worksheet['!ref'];
+  if (!ref) return [];
+
+  const range = XLSX.utils.decode_range(ref);
+  const columns: { header: string; col: number; isCode: boolean }[] = [];
+
+  for (let col = range.s.c; col <= range.e.c; col++) {
+    const headerCell = worksheet[XLSX.utils.encode_cell({ r: range.s.r, c: col })] as CellObject | undefined;
+    const header = cellDisplayText(headerCell).trim();
+    if (!header) continue;
+    columns.push({ header, col, isCode: isAlias(header, CODE_COLUMNS) });
+  }
+
+  const rows: Record<string, unknown>[] = [];
+  for (let rowIndex = range.s.r + 1; rowIndex <= range.e.r; rowIndex++) {
+    const row: ImportRow = {};
+    let hasValue = false;
+    let unsafeNumericCode = false;
+
+    for (const column of columns) {
+      const cell = worksheet[XLSX.utils.encode_cell({ r: rowIndex, c: column.col })] as CellObject | undefined;
+      const value = cellDisplayText(cell);
+      row[column.header] = value;
+      if (value !== '') hasValue = true;
+      if (column.isCode && hasUnsafeNumericCode(cell)) unsafeNumericCode = true;
+    }
+
+    if (!hasValue) continue;
+    Object.defineProperty(row, IMPORT_ROW_META, {
+      value: { sourceRowNumber: rowIndex + 1, unsafeNumericCode },
+      enumerable: false,
+    });
+    rows.push(row);
+  }
+
+  return rows;
+}
 
 function findColumn(row: Record<string, unknown>, aliases: string[]): unknown {
   for (const alias of aliases) {
@@ -89,7 +167,8 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
   }
 
   rows.forEach((row, index) => {
-    const rowNum = index + 2;
+    const meta = (row as ImportRow)[IMPORT_ROW_META];
+    const rowNum = meta?.sourceRowNumber ?? index + 2;
     const codeRaw = findColumn(row, CODE_COLUMNS);
     const nameRaw = findColumn(row, NAME_COLUMNS);
 
@@ -103,6 +182,13 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
 
     if (!code) {
       errors.push({ row: rowNum, error: 'Missing product code' });
+      return;
+    }
+    if (meta?.unsafeNumericCode) {
+      errors.push({
+        row: rowNum,
+        error: `"${code}": product code is stored as an unsafe numeric Excel value. Format the Product Code column as Text and re-import to avoid barcode corruption.`,
+      });
       return;
     }
     if (!name) {

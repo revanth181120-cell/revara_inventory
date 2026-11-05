@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { ProductFormData } from '../types/Product';
+import type { ProductFormData } from '../types/Product';
 import { Upload, X, AlertCircle, CheckCircle } from 'lucide-react';
-import { parseExcelRows, ImportSummary } from '../utils/importExcel';
+import { parseExcelRows, worksheetToImportRows, type ImportSummary } from '../utils/importExcel';
 
 type Props = {
   onImport: (products: ProductFormData[]) => void;
@@ -24,7 +24,7 @@ function ImportExcel({ onImport }: Props) {
         const workbook = XLSX.read(data, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(worksheet);
+        const rows = worksheetToImportRows(worksheet);
         const result = parseExcelRows(rows);
         setSummary(result);
       } catch {
