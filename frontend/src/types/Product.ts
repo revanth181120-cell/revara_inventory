@@ -112,9 +112,14 @@ export function parseSupplierFromCode(code: string): string {
   return '';
 }
 
-/** Price charged at sale — offer price if set, otherwise MRP/selling price */
+/** Offers are discounts; values at or above MRP are invalid and must not drive checkout. */
+export function hasDiscountOffer(price: Pick<Product, 'sellingPrice' | 'offerPrice'>): boolean {
+  return price.offerPrice > 0 && price.offerPrice < price.sellingPrice;
+}
+
+/** Price charged at sale — discounted offer only when it is below MRP/selling price. */
 export function getSalePrice(product: Pick<Product, 'sellingPrice' | 'offerPrice'>): number {
-  return product.offerPrice > 0 ? product.offerPrice : product.sellingPrice;
+  return hasDiscountOffer(product) ? product.offerPrice : product.sellingPrice;
 }
 
 export function productToCartItem(product: Product, quantity = 1): CartItem {

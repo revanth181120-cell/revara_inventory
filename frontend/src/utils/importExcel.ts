@@ -135,6 +135,13 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
       });
       return;
     }
+    if (offerPrice > 0 && sellingPrice > 0 && offerPrice >= sellingPrice) {
+      errors.push({
+        row: rowNum,
+        error: `"${code}": offer price ₹${offerPrice} must be less than selling price ₹${sellingPrice}.`,
+      });
+      return;
+    }
 
     if (costPrice === 0 && sellingPrice > 0) {
       warnings.push(`Row ${rowNum} (${code}): cost/rate is ₹0 — profit will look higher than reality.`);

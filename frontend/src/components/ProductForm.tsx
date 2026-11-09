@@ -100,6 +100,14 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
       setError('Product code and name are required.');
       return;
     }
+    if (form.offerPrice > 0 && form.sellingPrice <= 0) {
+      setError('Enter an MRP / selling price before adding an offer price.');
+      return;
+    }
+    if (form.offerPrice > 0 && form.offerPrice >= form.sellingPrice) {
+      setError('Offer price must be less than the MRP / selling price.');
+      return;
+    }
     const result = onSubmit({
       ...form,
       supplier: form.supplier || parseSupplierFromCode(form.code) || 'Unknown',
