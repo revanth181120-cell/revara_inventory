@@ -31,7 +31,7 @@ function App() {
     restockProduct, completeCartSale, revertSale, revertTransaction,
     resolvePendingStock, dismissPendingStock,
     getProductByCode, getProductById,
-    markLabelsPrinted, exportToExcel, exportToJson, exportSalesToExcel,
+    markLabelsPrinted, exportToExcel, exportToJson, restoreFromJson, exportSalesToExcel,
   } = useInventory();
 
   const cart = useCart(getProductById);
@@ -263,7 +263,12 @@ function App() {
           <span className={`storage-badge ${apiConnected ? 'storage-badge--db' : 'storage-badge--local'}`}>
             {apiConnected ? 'SQLite' : 'Local'}
           </span>
-          <ExportInventory onExportExcel={exportToExcel} onExportJson={exportToJson} onExportSales={exportSalesToExcel} />
+          <ExportInventory
+            onExportExcel={exportToExcel}
+            onExportJson={exportToJson}
+            onRestoreJson={restoreFromJson}
+            onExportSales={exportSalesToExcel}
+          />
           <ImportExcel onImport={handleImportProducts} />
           <button className="btn btn--outline" onClick={() => setModal('print-all')}>
             <Tag size={15} /> Print Labels

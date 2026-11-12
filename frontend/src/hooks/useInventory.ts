@@ -10,6 +10,24 @@ const PENDING_STOCK_KEY = 'revara_pending_stock';
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+type BackupRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is BackupRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function backupString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function backupNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function backupBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
 function normalizeProduct(raw: Partial<Product> & { code: string; name: string }): Product {
   const now = new Date().toISOString();
   return {
@@ -31,6 +49,88 @@ function normalizeProduct(raw: Partial<Product> & { code: string; name: string }
 
 function migrateStoredProducts(stored: unknown[]): Product[] {
   return stored.map((item) => normalizeProduct(item as Partial<Product> & { code: string; name: string }));
+}
+
+function restoreBackupProducts(raw: unknown): Product[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('Backup is missing a products array.');
+  }
+
+  return raw.map((item, index) => {
+    if (!isRecord(item) || typeof item.code !== 'string' || !item.code.trim() || typeof item.name !== 'string' || !item.name.trim()) {
+      throw new Error(`Backup product at row ${index + 1} is missing a valid code or name.`);
+    }
+
+    return normalizeProduct({
+      id: backupString(item.id),
+      code: item.code.trim(),
+      name: item.name.trim(),
+      category: backupString(item.category),
+      supplier: backupString(item.supplier),
+      quantity: backupNumber(item.quantity),
+      sellingPrice: backupNumber(item.sellingPrice),
+      offerPrice: backupNumber(item.offerPrice),
+      costPrice: backupNumber(item.costPrice),
+      imageUrl: typeof item.imageUrl === 'string' ? item.imageUrl : undefined,
+      labelPrinted: backupBoolean(item.labelPrinted),
+      createdAt: backupString(item.createdAt),
+      updatedAt: backupString(item.updatedAt),
+    });
+  });
+}
+
+function restoreBackupSales(raw: unknown): SaleRecord[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('Backup is missing a sales array.');
+  }
+
+  return raw.map((item, index) => {
+    if (!isRecord(item) || typeof item.productCode !== 'string' || !item.productCode.trim()) {
+      throw new Error(`Backup sale at row ${index + 1} is missing a valid product code.`);
+    }
+
+    return normalizeSaleRecord({
+      id: backupString(item.id),
+      transactionId: backupString(item.transactionId) || undefined,
+      productCode: item.productCode.trim(),
+      productName: backupString(item.productName),
+      category: backupString(item.category),
+      quantitySold: backupNumber(item.quantitySold, 1),
+      mrp: backupNumber(item.mrp),
+      offerPrice: backupNumber(item.offerPrice),
+      lineDiscount: backupNumber(item.lineDiscount),
+      salePrice: backupNumber(item.salePrice),
+      costPrice: backupNumber(item.costPrice),
+      saleDateTime: backupString(item.saleDateTime),
+      isCustom: backupBoolean(item.isCustom),
+      pendingStockId: backupString(item.pendingStockId) || undefined,
+    });
+  });
+}
+
+function restoreBackupPendingStock(raw: unknown): PendingStockItem[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error('Backup pendingStock must be an array.');
+  }
+
+  return raw.map((item, index) => {
+    if (!isRecord(item) || typeof item.name !== 'string' || !item.name.trim()) {
+      throw new Error(`Backup pending stock item at row ${index + 1} is missing a valid name.`);
+    }
+
+    return {
+      id: backupString(item.id) || generateId(),
+      saleId: backupString(item.saleId),
+      name: item.name.trim(),
+      category: backupString(item.category, 'Misc') || 'Misc',
+      quantitySold: backupNumber(item.quantitySold, 1),
+      sellingPrice: backupNumber(item.sellingPrice),
+      costPrice: backupNumber(item.costPrice),
+      saleDateTime: backupString(item.saleDateTime) || new Date().toISOString(),
+      resolved: backupBoolean(item.resolved),
+    };
+  });
 }
 
 function isSameDay(iso: string, date: Date): boolean {
@@ -535,6 +635,29 @@ export function useInventory() {
     URL.revokeObjectURL(url);
   }, [products, sales, pendingStock]);
 
+  const restoreFromJson = useCallback((backup: unknown): { success: boolean; error?: string } => {
+    try {
+      if (!isRecord(backup)) {
+        return { success: false, error: 'Backup file must contain a JSON object.' };
+      }
+
+      const restoredProducts = restoreBackupProducts(backup.products);
+      const restoredSales = restoreBackupSales(backup.sales);
+      const restoredPendingStock = restoreBackupPendingStock(backup.pendingStock);
+
+      setProducts(restoredProducts);
+      setSales(restoredSales);
+      setPendingStock(restoredPendingStock);
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Could not restore backup.',
+      };
+    }
+  }, []);
+
   const exportSalesToExcel = useCallback(() => {
     const rows = sales.map((s) => ({
       'Transaction ID': s.transactionId || '',
@@ -645,6 +768,7 @@ export function useInventory() {
     markLabelsPrinted,
     exportToExcel,
     exportToJson,
+    restoreFromJson,
     exportSalesToExcel,
   };
 }
