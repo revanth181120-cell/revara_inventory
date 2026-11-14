@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product, ProductFormData, CATEGORY_MAP, MATERIAL_MAP, SUPPLIER_MAP, parseSupplierFromCode } from '../types/Product';
+import { getProductCodeValidationError, normalizeProductCodeInput } from '../utils/barcode';
 import { X, Upload, ImageIcon } from 'lucide-react';
 
 interface ProductFormProps {
@@ -96,13 +97,20 @@ export const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, onClose, edi
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!form.code.trim() || !form.name.trim()) {
-      setError('Product code and name are required.');
+    const code = normalizeProductCodeInput(form.code);
+    const codeError = getProductCodeValidationError(code);
+    if (codeError) {
+      setError(codeError);
+      return;
+    }
+    if (!form.name.trim()) {
+      setError('Product name is required.');
       return;
     }
     const result = onSubmit({
       ...form,
-      supplier: form.supplier || parseSupplierFromCode(form.code) || 'Unknown',
+      code,
+      supplier: form.supplier || parseSupplierFromCode(code) || 'Unknown',
     });
     if (!result.success) {
       setError(result.error || 'Failed to save product.');

@@ -327,6 +327,16 @@ a { color: inherit; text-decoration: none; }
 
 .td-barcode { min-width: 120px; }
 .barcode-cell svg { max-height: 36px; display: block; }
+.barcode-fallback {
+  display: inline-block;
+  max-width: 110px;
+  color: #a85b00;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  text-transform: uppercase;
+}
 
 .td-actions { text-align: center !important; }
 .action-group { display: flex; gap: 5px; justify-content: center; }
