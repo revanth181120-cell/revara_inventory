@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import Barcode from 'react-barcode';
-import { Product, CATEGORY_OPTIONS, getSalePrice, productUnitProfit } from '../types/Product';
+import { Product, CATEGORY_OPTIONS, productUnitProfit } from '../types/Product';
 import { getStockLevel } from '../utils/stockTiers';
+import { SafeBarcode } from './SafeBarcode';
 import { Edit2, Trash2, ShoppingCart, Printer, Search, ChevronUp, ChevronDown, Plus, ImageIcon } from 'lucide-react';
 
 interface ProductTableProps {
@@ -206,7 +206,7 @@ export const ProductTable: React.FC<ProductTableProps> = ({
                   </td>
                   <td className="td-barcode">
                     <div className="barcode-cell">
-                      <Barcode
+                      <SafeBarcode
                         value={product.code}
                         width={1}
                         height={32}

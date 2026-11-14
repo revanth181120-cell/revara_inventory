@@ -118,7 +118,7 @@ function App() {
   }, [getProductByCode, stallMode, cart, addToCart]);
 
   const hardwareScannerEnabled =
-    stallMode && modal !== 'add' && modal !== 'edit' && modal !== 'scanner';
+    stallMode && !lastTransaction && modal !== 'add' && modal !== 'edit' && modal !== 'scanner';
 
   useHardwareScanner({
     enabled: hardwareScannerEnabled,

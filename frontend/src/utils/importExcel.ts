@@ -1,4 +1,5 @@
 import { ProductFormData, parseSupplierFromCode, CATEGORY_MAP } from '../types/Product';
+import { getProductCodeValidationError, normalizeProductCodeInput } from './barcode';
 
 /** Priority order — first match wins. Offer Price is intentionally excluded from selling. */
 const SELLING_PRICE_COLUMNS = [
@@ -98,11 +99,12 @@ export function parseExcelRows(rows: Record<string, unknown>[]): ImportSummary {
       return;
     }
 
-    const code = String(codeRaw || '').trim();
+    const code = normalizeProductCodeInput(String(codeRaw || ''));
     const name = String(nameRaw || '').trim();
 
-    if (!code) {
-      errors.push({ row: rowNum, error: 'Missing product code' });
+    const codeError = getProductCodeValidationError(code);
+    if (codeError) {
+      errors.push({ row: rowNum, error: codeError });
       return;
     }
     if (!name) {

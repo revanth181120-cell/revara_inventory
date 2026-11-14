@@ -1,7 +1,7 @@
 import React from 'react';
-import Barcode from 'react-barcode';
 import { Product, LabelDimensions, getLabelRowWidthMm, isDumbbellLayout, getDumbbellStockWidthMm } from '../types/Product';
 import { getLabelSizing } from '../utils/labelSizing';
+import { SafeBarcode } from './SafeBarcode';
 
 interface LabelPrintProps {
   product: Product;
@@ -116,7 +116,7 @@ export const LabelPrint: React.FC<LabelPrintProps> = ({ product, dimensions, for
       </div>
 
       <div className="tt-label__barcode">
-        <Barcode
+        <SafeBarcode
           value={product.code}
           format="CODE128"
           width={sizing.barcodeWidth}
