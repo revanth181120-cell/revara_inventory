@@ -60,6 +60,8 @@ function isSameWeek(iso: string, date: Date): boolean {
 export function useInventory() {
   const [apiConnected, setApiConnected] = useState(false);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncQueue = useRef<Promise<void>>(Promise.resolve());
+  const syncVersion = useRef(0);
   const readyForSync = useRef(false);
 
   const [products, setProducts] = useState<Product[]>(() => {
@@ -143,10 +145,18 @@ export function useInventory() {
   // Debounced sync to SQLite when data changes
   useEffect(() => {
     if (!apiConnected || !readyForSync.current) return;
+    const version = ++syncVersion.current;
+
     if (syncTimer.current) clearTimeout(syncTimer.current);
     syncTimer.current = setTimeout(() => {
-      syncProducts(products).catch(() => setApiConnected(false));
-      syncSales(sales).catch(() => setApiConnected(false));
+      syncTimer.current = null;
+      syncQueue.current = syncQueue.current
+        .then(async () => {
+          if (version !== syncVersion.current) return;
+          await syncProducts(products);
+          await syncSales(sales);
+        })
+        .catch(() => setApiConnected(false));
     }, 800);
     return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
   }, [products, sales, apiConnected]);
