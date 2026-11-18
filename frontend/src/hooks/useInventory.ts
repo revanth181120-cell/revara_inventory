@@ -253,9 +253,21 @@ export function useInventory() {
     return updated ? { success: true } : { success: false, error };
   }, []);
 
-  const deleteProduct = useCallback((id: string) => {
+  const deleteProduct = useCallback((id: string): { success: boolean; error?: string } => {
+    const product = products.find((p) => p.id === id);
+    if (!product) {
+      return { success: false, error: 'Product not found.' };
+    }
+    if (product.quantity > 0) {
+      return {
+        success: false,
+        error: `Cannot delete ${product.code} while ${product.quantity} unit${product.quantity === 1 ? '' : 's'} are still in stock.`,
+      };
+    }
+
     setProducts((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+    return { success: true };
+  }, [products]);
 
   const restockProduct = useCallback((id: string, amount: number = 1) => {
     setProducts((prev) =>

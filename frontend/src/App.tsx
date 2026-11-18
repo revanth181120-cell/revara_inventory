@@ -165,8 +165,12 @@ function App() {
   };
 
   const handleDelete = (id: string) => {
-    deleteProduct(id);
-    showToast('Product deleted.');
+    const result = deleteProduct(id);
+    if (result.success) {
+      showToast('Product deleted.');
+    } else {
+      showToast(result.error || 'Could not delete product.', 'error');
+    }
   };
 
   const handleRestock = (id: string) => {
