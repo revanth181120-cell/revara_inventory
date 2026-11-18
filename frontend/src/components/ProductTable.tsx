@@ -275,9 +275,14 @@ export const ProductTable: React.FC<ProductTableProps> = ({
               Are you sure you want to delete <strong>{deleteTarget.name}</strong> ({deleteTarget.code})?
               This cannot be undone.
             </p>
+            {deleteTarget.quantity > 0 && (
+              <p className="form-error">
+                {deleteTarget.quantity} unit{deleteTarget.quantity === 1 ? '' : 's'} are still in stock. Sell or adjust stock to 0 before deleting this product.
+              </p>
+            )}
             <div className="form-actions">
               <button className="btn btn--ghost" onClick={() => setDeleteTarget(null)}>Cancel</button>
-              <button className="btn btn--danger" onClick={confirmDelete}>Delete</button>
+              <button className="btn btn--danger" onClick={confirmDelete} disabled={deleteTarget.quantity > 0}>Delete</button>
             </div>
           </div>
         </div>
