@@ -171,7 +171,16 @@ export function openInvoiceOnWhatsApp(
 
   const text = formatInvoiceForWhatsApp(transaction);
   const url = `https://wa.me/${normalized}?text=${encodeURIComponent(text)}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
+  const whatsappWindow = window.open('about:blank', '_blank');
+  if (!whatsappWindow) {
+    return {
+      success: false,
+      error: 'Could not open WhatsApp. Please allow pop-ups for this site and try again.',
+    };
+  }
+
+  whatsappWindow.opener = null;
+  whatsappWindow.location.href = url;
   saveWhatsAppPhone(phone.trim());
 
   void persistSentInvoice(normalized, transaction, text);
